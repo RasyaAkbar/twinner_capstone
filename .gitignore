@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.env.*
+!.env.example
+# Konfigurasi dan penanda deploy di server staging (docs/STAGING.md).
+staging.env
+.deployed
+*.tsbuildinfo
+.DS_Store
+*.log
+.verification/
+pytest-cache-files-*/
+
+synthetic-output/
+
+# Hasil backup basis data (ops/backup, DIG-218): berisi seluruh data, jangan di-commit.
+backups/
