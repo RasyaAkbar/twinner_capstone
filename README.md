@@ -247,5 +247,3 @@ python -m app.modules.auth.set_roles --username bagas --role admin_data --role s
 - Endpoint dilindungi dengan `Depends(require_permission(Perm.MASTER_DATA_WRITE))` dari `app.modules.auth.dependencies`. Tanpa token: `401`. Login tapi tidak berizin: `403`.
 - Izin dibaca ulang di setiap request, jadi perubahan peran langsung berlaku tanpa login ulang.
 - Semua endpoint `/api/v1/data/*` wajib login dan izin (DIG-226): baca master data `master_data:read`, ubah master data dan hari libur `master_data:write`, lihat ketidakhadiran (D-09) dan beban non-proyek (D-08) `workload:read_all`, catat ketidakhadiran `availability:write`, tambah/ubah/hapus beban non-proyek `master_data:write`, impor CSV D-08 `import:run`. `/api/v1/health` tetap terbuka. Tes `tests/test_data_permissions.py` gagal bila ada endpoint data baru tanpa `require_permission` atau belum dicatat di peta izinnya.
-#   t w i n n e r _ c a p s t o n e  
- 
