@@ -170,7 +170,7 @@ def test_jc_app_cannot_truncate(migrated):
         "CREATE TABLE public.tabel_liar (id int)",
         "DROP TABLE public.holidays",
         "ALTER TABLE public.holidays ADD COLUMN catatan text",
-        "CREATE TABLE twinner.scenario (id int)",
+        "CREATE TABLE twinner.data_uji (id int)",
         "SELECT 1 FROM twinner.pg_class_does_not_matter",
     ],
 )
@@ -234,13 +234,13 @@ def test_downgrade_removes_schema_and_privileges(migrated):
 
 def test_downgrade_refuses_to_drop_twinner_data(migrated):
     with migrated.begin() as connection:
-        connection.execute(text("CREATE TABLE twinner.scenario (id int)"))
+        connection.execute(text("CREATE TABLE twinner.data_uji (id int)"))
 
     try:
         with pytest.raises(Exception, match="depend"):
             with migrated.begin() as connection:
                 alembic(connection, command.downgrade, BEFORE_ROLES)
-        assert scalar(migrated, "SELECT to_regclass('twinner.scenario') IS NOT NULL") is True
+        assert scalar(migrated, "SELECT to_regclass('twinner.data_uji') IS NOT NULL") is True
     finally:
         with migrated.begin() as connection:
-            connection.execute(text("DROP TABLE IF EXISTS twinner.scenario"))
+            connection.execute(text("DROP TABLE IF EXISTS twinner.data_uji"))

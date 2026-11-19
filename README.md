@@ -190,6 +190,10 @@ Selama data PuTI belum tersedia, `python -m synthetic` dari folder `backend/` me
 
 Simulasi tWinner memakai baseline snapshot, yaitu salinan beku 11 CSV final sources di schema `twinner`. Snapshot diimpor lewat `POST /api/v1/simulasi/baseline-snapshots/import` atau `python -m app.modules.simulasi.snapshot_cli <folder> --source synthetic`, lalu dibaca lewat `GET /api/v1/simulasi/baseline-snapshots/current`. Detail: [docs/BASELINE_SNAPSHOT.md](docs/BASELINE_SNAPSHOT.md).
 
+### Scenario Manager
+
+Skenario *what-if* dibuat dari satu dari delapan situasi keputusan dan dikaitkan ke baseline snapshot: `POST /api/v1/simulasi/scenarios` membuat draft, `PATCH` mengisi parameter, `POST .../save` memvalidasi dan menyimpan, dan `POST .../duplicate` membuat salinan. Skema parameter per situasi untuk formulir tersedia di `GET /api/v1/simulasi/scenarios/situations`. Detail: [docs/SCENARIO_MANAGER.md](docs/SCENARIO_MANAGER.md).
+
 Referensi teknis: [Vite](https://vite.dev/guide/), [router modular FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/), [SQLAlchemy PostgreSQL](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html).
 
 ## Login dan sesi pengguna

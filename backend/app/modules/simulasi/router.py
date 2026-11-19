@@ -8,6 +8,7 @@ from app.modules.auth.dependencies import require_permission
 from app.modules.auth.models import AppUser
 from app.modules.auth.permissions import Perm
 from app.modules.simulasi import snapshot_service as service
+from app.modules.simulasi.scenario_router import router as scenario_router
 from app.modules.simulasi.snapshot_schemas import (
     BaselineSnapshotData,
     SnapshotImportRequest,
@@ -83,3 +84,7 @@ def get_baseline_snapshot(db: Db, snapshot_id: Annotated[int, Path(ge=1)]) -> Ba
         return service.load_snapshot(db, snapshot_id)
     except service.SnapshotNotFoundError as exc:
         raise _not_found(exc) from exc
+
+
+# Scenario Manager (SCRUM-22): /simulasi/scenarios/...
+router.include_router(scenario_router)

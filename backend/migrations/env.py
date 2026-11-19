@@ -8,6 +8,7 @@ import app.modules.data.models  # noqa: F401  (mendaftarkan D-01 s.d. D-11 ke me
 import app.modules.data.resource_alias_models  # noqa: F401  (mendaftarkan resource_alias)
 import app.modules.data.staging_models  # noqa: F401  (mendaftarkan staging Trello ke metadata)
 import app.modules.data.support_models  # noqa: F401  (mendaftarkan tabel pendukung 7.3)
+import app.modules.simulasi.scenario_models  # noqa: F401  (mendaftarkan twinner.scenario)
 import app.modules.simulasi.snapshot_models  # noqa: F401  (mendaftarkan tabel schema twinner)
 from app.db.base import Base
 from app.db.session import engine

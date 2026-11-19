@@ -15,7 +15,7 @@ Ringkasan hak akses basis data bersama J&C dan tWinner sesuai `docs/DATA_CONTRAC
 | Schema | Pemilik isi | Keterangan |
 | --- | --- | --- |
 | `public` | J&C | Final sources D-01 s.d. D-11 dan tabel internal J&C |
-| `twinner` | tWinner | Skenario dan hasil simulasi tWinner. J&C tidak menulis ke sini; `jc_app` tidak punya hak apa pun di schema ini. Tabel pertama: `baseline_snapshot` dan `baseline_snapshot_table` (migrasi `0021`, [BASELINE_SNAPSHOT.md](BASELINE_SNAPSHOT.md)) |
+| `twinner` | tWinner | Skenario dan hasil simulasi tWinner. J&C tidak menulis ke sini; `jc_app` tidak punya hak apa pun di schema ini. Tabel: `baseline_snapshot` dan `baseline_snapshot_table` (migrasi `0021`, [BASELINE_SNAPSHOT.md](BASELINE_SNAPSHOT.md)), `scenario` (migrasi `0022`, [SCENARIO_MANAGER.md](SCENARIO_MANAGER.md)) |
 
 ## Perilaku migrasi `0014`
 
