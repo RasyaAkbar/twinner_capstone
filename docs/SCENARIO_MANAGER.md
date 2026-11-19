@@ -37,7 +37,7 @@ Semua berawalan `/api/v1/simulasi` dan memakai izin `baseline:read` (Kaur/Asman 
 | `GET /scenarios/{id}` | Skenario lengkap dengan `parameters` dan `parameter_errors`. |
 | `PATCH /scenarios/{id}` | Ubah `name` dan/atau `parameters`. `parameters` mengganti seluruh isi, tidak digabung. Situasi dan snapshot tidak dapat diubah; buat skenario baru atau duplikasi. |
 | `POST /scenarios/{id}/save` | Validasi penuh. Lolos: parameter disimpan dalam bentuk kanonis (nilai bawaan terisi, teks dirapikan) dan status menjadi `saved`. Gagal: `422` dan skenario tidak berubah. |
-| `POST /scenarios/{id}/duplicate` | Body opsional `{"name"}`; bawaannya `"<nama asal> (salinan)"`. Salinan membawa situasi, parameter, status, dan snapshot yang sama, serta `duplicated_from`. Nama salinan harus berbeda dari nama asal. `201`. |
+| `POST /scenarios/{id}/duplicate` | Body opsional `{"name"}`; bawaannya `"<nama asal> (salinan)"`. Salinan membawa situasi, parameter, status, dan snapshot yang sama, serta `duplicated_from`. Nama salinan harus berbeda dari nama asal. `201`. | *Stage save dan duplikat*
 | `DELETE /scenarios/{id}` | Hapus. `duplicated_from` salinannya menjadi `null`. `204`. |
 
 Kesalahan per field, baik di `422` maupun di `parameter_errors`, memakai bentuk error FastAPI yang sama dengan modul Data:
