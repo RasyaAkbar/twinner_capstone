@@ -186,6 +186,10 @@ $env:TEST_DATABASE_URL = "postgresql+psycopg://puti:puti_local@localhost:5432/di
 
 Selama data PuTI belum tersedia, `python -m synthetic` dari folder `backend/` menghasilkan final sources D-01 s.d. D-11, sumber mentah (Project Plan, Trello, git log), dan data kotor untuk pengujian. Detail: [generator data sintetis](docs/SYNTHETIC_DATA.md).
 
+### Baseline snapshot untuk simulasi
+
+Simulasi tWinner memakai baseline snapshot, yaitu salinan beku 11 CSV final sources di schema `twinner`. Snapshot diimpor lewat `POST /api/v1/simulasi/baseline-snapshots/import` atau `python -m app.modules.simulasi.snapshot_cli <folder> --source synthetic`, lalu dibaca lewat `GET /api/v1/simulasi/baseline-snapshots/current`. Detail: [docs/BASELINE_SNAPSHOT.md](docs/BASELINE_SNAPSHOT.md).
+
 Referensi teknis: [Vite](https://vite.dev/guide/), [router modular FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/), [SQLAlchemy PostgreSQL](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html).
 
 ## Login dan sesi pengguna

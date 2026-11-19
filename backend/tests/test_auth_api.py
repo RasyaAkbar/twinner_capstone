@@ -50,6 +50,8 @@ def session_factory():
         )
     engine = create_engine(url, pool_pre_ping=True)
     with engine.begin() as connection:
+        # Sama dengan conftest: schema twinner (migrasi 0021) ikut dikosongkan.
+        connection.execute(text("DROP SCHEMA IF EXISTS twinner CASCADE"))
         connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
         config = Config(str(BACKEND_DIR / "alembic.ini"))
