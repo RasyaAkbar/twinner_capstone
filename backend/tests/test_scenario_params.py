@@ -519,6 +519,18 @@ CASES = [
     (Situation.NEW_MEMBER, {"initial_capacity": 0}, [(("initial_capacity",), "greater_than")]),
     (Situation.NEW_MEMBER, {"initial_capacity": 1.5}, [(("initial_capacity",), "less_than_equal")]),
     (Situation.NEW_MEMBER, {"join_date": "2024-01-01"}, [(("join_date",), "date_out_of_range")]),
+    # Waktu mentor (SCRUM-24): mentor harus anggota baseline, bagiannya 0 < x <= 0.5.
+    (
+        Situation.NEW_MEMBER,
+        {"mentor_resource_id": "RES-999"},
+        [(("mentor_resource_id",), "resource_not_found")],
+    ),
+    (Situation.NEW_MEMBER, {"mentor_share": 0.3}, [(("mentor_resource_id",), "missing")]),
+    (
+        Situation.NEW_MEMBER,
+        {"mentor_resource_id": "RES-002", "mentor_share": 0.8},
+        [(("mentor_share",), "less_than_equal")],
+    ),
     # 4. Member Rotation or Withdrawal
     (
         Situation.MEMBER_ROTATION,
@@ -734,6 +746,9 @@ ALSO_VALID = [
     (Situation.MEMBER_ABSENCE, {"absence_type": "maternity_leave"}),
     (Situation.NEW_MEMBER, {"onboarding_weeks": 1, "initial_capacity": 1}),
     (Situation.NEW_MEMBER, {"onboarding_weeks": 1.5}),
+    # Mentor opsional; tanpa bagian waktu dipakai bawaan 20%.
+    (Situation.NEW_MEMBER, {"mentor_resource_id": "RES-002"}),
+    (Situation.NEW_MEMBER, {"mentor_resource_id": "RES-002", "mentor_share": 0.5}),
     # Withdrawal: keluar dari tim tanpa proyek tujuan.
     (Situation.MEMBER_ROTATION, {"destination_project_id": None, "existing_assignment_ids": []}),
     # Pindah ke proyek on_hold diperbolehkan; hanya proyek yang sudah rilis yang ditolak.

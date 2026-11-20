@@ -23,7 +23,7 @@ POST /scenarios ──► draft ──PATCH (parameter)──► draft ──POS
 | `draft` | Baru dibuat, atau parameternya diubah setelah disimpan. Parameter boleh belum lengkap atau belum valid; kesalahannya dilaporkan di `parameter_errors`, bukan ditolak, supaya isian formulir UC-02 yang belum selesai tidak hilang. |
 | `saved` | Lolos validasi penuh lewat `POST /save` dan siap disimulasikan. |
 
-Skenario `saved` selalu berisi parameter yang valid: mengubah parameternya (bukan namanya) mengembalikan status ke `draft` sampai disimpan lagi, sedangkan snapshot yang ditunjuk tidak pernah berubah. Mesin simulasi cukup memeriksa `status == "saved"`.
+Skenario `saved` selalu berisi parameter yang valid: mengubah parameternya (bukan namanya) mengembalikan status ke `draft` sampai disimpan lagi, sedangkan snapshot yang ditunjuk tidak pernah berubah. Menjalankan simulasi (`POST /scenarios/{id}/run`, UC-03) selalu memvalidasi penuh parameter yang akan disimulasikan; mode `run_and_save` menyimpan skenario menjadi `saved` lebih dulu. Lihat [SIMULATION_ENGINE.md](SIMULATION_ENGINE.md).
 
 ## Endpoint
 
@@ -52,7 +52,7 @@ Kesalahan per field, baik di `422` maupun di `parameter_errors`, memakai bentuk 
 | --- | --- | --- |
 | Mid-sprint Change Request (`change_request`) | Task ditambah/dikurangi, estimasi hari, periode terdampak, target | **`project_id`**, `added_tasks[]` (`task_name`, `required_role_id`, `estimated_days`), `removed_task_ids`, **`affected_period`** (`start`, `end`), **`target_date`** |
 | Member Absence (`member_absence`) | Anggota, jenis ketidakhadiran, periode, task terdampak | **`resource_id`**, **`absence_type`** (`planned_leave`, `sudden_leave`, `maternity_leave`), **`absence_period`**, `affected_task_ids` (kosong = semua task aktifnya) |
-| New Member (`new_member`) | Peran, senioritas, tanggal bergabung, onboarding 1-2 minggu, kapasitas awal | **`role_id`**, **`seniority`**, **`join_date`**, **`onboarding_weeks`** (1-2), **`initial_capacity`** (0-1, pecahan kapasitas penuh) |
+| New Member (`new_member`) | Peran, senioritas, tanggal bergabung, onboarding 1-2 minggu, kapasitas awal, waktu mentor (opsional, SCRUM-24) | **`role_id`**, **`seniority`**, **`join_date`**, **`onboarding_weeks`** (1-2), **`initial_capacity`** (0-1, pecahan kapasitas penuh), `mentor_resource_id` (kosong = tanpa mentor), `mentor_share` (0-0.5 kapasitas harian mentor, kosong = 0.2; butuh mentor) |
 | Member Rotation or Withdrawal (`member_rotation`) | Anggota, proyek asal dan tujuan, tanggal pindah, penugasan yang ada | **`resource_id`**, **`origin_project_id`**, `destination_project_id` (kosong = keluar dari tim), **`transfer_date`**, `existing_assignment_ids` (kosong = semua penugasan aktif di proyek asal) |
 | Task Overrun (`task_overrun`) | Task, durasi awal, durasi revisi, sisa pekerjaan | **`task_id`**, **`original_days`**, **`revised_days`**, **`remaining_days`** |
 | Task Blocker (`task_blocker`) | Task terblokir, dependency penghambat, lama blokir, task independen | **`task_id`**, `blocking_task_id` (kosong = penghambat di luar baseline), **`blocking_days`**, `independent_task_ids` |
@@ -72,6 +72,7 @@ Bentuk (field wajib, tipe, format ID dan tanggal, enum, batas angka, field tak d
 | Task yang dikurangi, terdampak, terlambat, terblokir, atau independen | Belum `done` atau `dropped`. Pengecualian: task terdampak Critical Bug, karena bug boleh ditemukan di task yang sudah selesai. |
 | Change Request | Minimal satu task ditambah atau dikurangi; task yang dikurangi milik `project_id`; periode tidak mulai sebelum proyek dimulai; `target_date` tidak sebelum awal periode. |
 | Member Absence | Periode tidak bertumpuk dengan ketidakhadiran anggota itu di baseline (seperti `ex_availability_no_overlap`, kecuali `rotation_in`); task terdampak ditugaskan ke anggota itu. |
+| New Member | Mentor (bila diisi) ada di baseline dan sudah bergabung sebelum anggota baru; `mentor_share` hanya bersama mentor. |
 | Member Rotation | Tujuan berbeda dari asal dan belum rilis; anggota punya penugasan di proyek asal; `transfer_date` tidak sebelum proyek asal dimulai; penugasan yang dilepas milik anggota itu, di proyek asal, dan belum berakhir sebelum tanggal pindah. |
 | Task Overrun | `original_days` sama dengan estimasi baseline; `revised_days` lebih dari `original_days`; `remaining_days` tidak lebih dari `revised_days`. |
 | Task Blocker | Penghambat bukan task itu sendiri dan tercatat sebagai dependency-nya; task independen tidak bergantung (langsung atau tidak langsung) pada task yang terblokir. |

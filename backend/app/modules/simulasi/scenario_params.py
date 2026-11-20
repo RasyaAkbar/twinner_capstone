@@ -60,6 +60,9 @@ MAX_PERIOD_DAYS = 366
 # Tanggal skenario boleh melewati tanggal akhir baseline sejauh ini (target baru, misalnya).
 HORIZON_SLACK_DAYS = 365
 MAX_ITEMS = 200
+# Waktu mentor untuk anggota baru (SCRUM-24): bagian kapasitas hariannya selama onboarding.
+DEFAULT_MENTOR_SHARE = 0.2
+MAX_MENTOR_SHARE = 0.5
 
 # Task yang sudah selesai atau dibatalkan tidak dapat lagi dikurangi, terlambat, atau terblokir.
 CLOSED_TASK_STATUSES = frozenset({TaskStatus.DONE, TaskStatus.DROPPED})
@@ -127,6 +130,16 @@ class NewMemberParams(Params):
     onboarding_weeks: float = Field(ge=1, le=2, description="Lama onboarding, 1 sampai 2 minggu")
     initial_capacity: float = Field(
         gt=0, le=1, description="Kapasitas selama onboarding, pecahan kapasitas penuh (0.5 = 50%)"
+    )
+    mentor_resource_id: ResourceId | None = Field(
+        default=None, description="Anggota yang membimbing selama onboarding; kosong berarti tanpa"
+    )
+    mentor_share: float | None = Field(
+        default=None,
+        gt=0,
+        le=MAX_MENTOR_SHARE,
+        description="Bagian kapasitas harian mentor untuk membimbing (0.2 = 20%); kosong berarti "
+        f"{DEFAULT_MENTOR_SHARE:g}",
     )
 
 
@@ -428,6 +441,17 @@ def check_member_absence(p: MemberAbsenceParams, c: _Checker) -> None:
 
 def check_new_member(p: NewMemberParams, c: _Checker) -> None:
     c.role(("role_id",), p.role_id)
+    if p.mentor_resource_id is not None:
+        mentor = c.resource(("mentor_resource_id",), p.mentor_resource_id)
+        if mentor is not None and mentor.join_date > p.join_date:
+            c.add(
+                ("mentor_resource_id",),
+                f"{mentor.resource_id} baru bergabung {mentor.join_date.isoformat()}, "
+                "setelah anggota baru",
+                "mentor_not_joined",
+            )
+    elif p.mentor_share is not None:
+        c.add(("mentor_resource_id",), "Pilih mentor bila bagian waktu mentor diisi", "missing")
 
 
 def check_member_rotation(p: MemberRotationParams, c: _Checker) -> None:

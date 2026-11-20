@@ -194,6 +194,10 @@ Simulasi tWinner memakai baseline snapshot, yaitu salinan beku 11 CSV final sour
 
 Skenario *what-if* dibuat dari satu dari delapan situasi keputusan dan dikaitkan ke baseline snapshot: `POST /api/v1/simulasi/scenarios` membuat draft, `PATCH` mengisi parameter, `POST .../save` memvalidasi dan menyimpan, dan `POST .../duplicate` membuat salinan. Skema parameter per situasi untuk formulir tersedia di `GET /api/v1/simulasi/scenarios/situations`. Detail: [docs/SCENARIO_MANAGER.md](docs/SCENARIO_MANAGER.md).
 
+### Simulasi what-if
+
+`POST /api/v1/simulasi/scenarios/{id}/run` menjalankan baseline dan skenario hari kerja demi hari kerja (aturan situasi, kalender kapasitas per anggota, penjadwalan dengan propagasi dependency), lalu mengembalikan KPI, selisih, dan statusnya beserta proyek, task, dan beban anggota yang terdampak. `mode` `run_only` hanya mengembalikan hasil; `run_and_save` menyimpan skenario lalu hasilnya, yang dibuka lagi lewat `GET .../result` dan drill-down per proyek atau anggota. `replication: {}` menambahkan median dan rentang dari 500 replikasi Monte Carlo. Asumsi model dan rumusnya: [docs/SIMULATION_ENGINE.md](docs/SIMULATION_ENGINE.md).
+
 Referensi teknis: [Vite](https://vite.dev/guide/), [router modular FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/), [SQLAlchemy PostgreSQL](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html).
 
 ## Login dan sesi pengguna

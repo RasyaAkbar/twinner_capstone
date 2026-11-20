@@ -9,6 +9,7 @@ from app.modules.auth.models import AppUser
 from app.modules.auth.permissions import Perm
 from app.modules.simulasi import snapshot_service as service
 from app.modules.simulasi.scenario_router import router as scenario_router
+from app.modules.simulasi.simulation_router import router as simulation_router
 from app.modules.simulasi.snapshot_schemas import (
     BaselineSnapshotData,
     SnapshotImportRequest,
@@ -88,3 +89,5 @@ def get_baseline_snapshot(db: Db, snapshot_id: Annotated[int, Path(ge=1)]) -> Ba
 
 # Scenario Manager (SCRUM-22): /simulasi/scenarios/...
 router.include_router(scenario_router)
+# Menjalankan simulasi dan hasilnya (SCRUM-28, SCRUM-29): /simulasi/scenarios/{id}/run, /result
+router.include_router(simulation_router)

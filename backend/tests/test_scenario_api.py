@@ -31,6 +31,12 @@ EXPECTED = {
     ("POST", "/scenarios/{scenario_id}/save"): Perm.BASELINE_READ,
     ("POST", "/scenarios/{scenario_id}/duplicate"): Perm.BASELINE_READ,
     ("DELETE", "/scenarios/{scenario_id}"): Perm.BASELINE_READ,
+    # Menjalankan simulasi dan hasilnya (SCRUM-28, SCRUM-29).
+    ("GET", "/scenarios/{scenario_id}/run-preview"): Perm.BASELINE_READ,
+    ("POST", "/scenarios/{scenario_id}/run"): Perm.BASELINE_READ,
+    ("GET", "/scenarios/{scenario_id}/result"): Perm.BASELINE_READ,
+    ("GET", "/scenarios/{scenario_id}/result/projects/{project_id}"): Perm.BASELINE_READ,
+    ("GET", "/scenarios/{scenario_id}/result/members/{resource_id}"): Perm.BASELINE_READ,
 }
 
 
