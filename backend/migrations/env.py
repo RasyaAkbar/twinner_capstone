@@ -11,6 +11,7 @@ import app.modules.data.support_models  # noqa: F401  (mendaftarkan tabel penduk
 import app.modules.simulasi.scenario_models  # noqa: F401  (mendaftarkan twinner.scenario)
 import app.modules.simulasi.simulation_models  # noqa: F401  (mendaftarkan twinner.simulation_run)
 import app.modules.simulasi.snapshot_models  # noqa: F401  (mendaftarkan tabel schema twinner)
+import app.modules.evaluasi.models # noqa: F401 (mendaftarkan twinner.kpi_evaluation)
 from app.db.base import Base
 from app.db.session import engine
 
