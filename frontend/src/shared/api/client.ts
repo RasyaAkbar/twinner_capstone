@@ -3,7 +3,11 @@ import { clearSession, getAccessToken } from '../auth/session';
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
 /** Satu pesan dari `detail` FastAPI. `field` terisi bila pesan milik kolom tertentu. */
-export type ApiIssue = { field: string | null; message: string };
+export type ApiIssue = {
+  field: string | null;
+  message: string;
+  path?: (string | number)[];
+};
 
 export class ApiError extends Error {
   readonly status: number;
@@ -42,12 +46,30 @@ function translate(message: string): string {
 }
 
 function toIssues(detail: unknown): ApiIssue[] {
-  const items: unknown[] = Array.isArray(detail) ? detail : detail === undefined ? [] : [detail];
+  const items: unknown[] = Array.isArray(detail)
+    ? detail
+    : detail === undefined
+      ? []
+      : [detail];
+
   return items.map((item) => {
-    if (typeof item === 'string') return { field: null, message: item };
+    if (typeof item === 'string') {
+      return { field: null, message: item };
+    }
+
     const { loc, msg } = item as DetailItem;
     const last = loc?.[loc.length - 1];
-    return { field: loc && loc[0] === 'body' && typeof last === 'string' ? last : null, message: translate((msg ?? 'Permintaan ditolak').replace(/^Value error, /, '')) };
+
+    return {
+      field:
+        loc && loc[0] === 'body' && typeof last === 'string'
+          ? last
+          : null,
+      message: translate(
+        (msg ?? 'Permintaan ditolak').replace(/^Value error, /, ''),
+      ),
+      ...(loc ? { path: loc } : {}),
+    };
   });
 }
 
