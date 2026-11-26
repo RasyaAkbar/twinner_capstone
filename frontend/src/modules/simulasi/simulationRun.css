@@ -1,0 +1,264 @@
+/* SCRUM-30 — Simulation run configuration */
+
+.sim-run-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sim-run-context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f7f8fa;
+}
+
+.sim-run-context > strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: #24282f;
+}
+
+.sim-run-caption {
+  font-size: 12px;
+  color: #7b8490;
+}
+
+.sim-run-context-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Run mode */
+
+.sim-run-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.sim-run-fieldset legend {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #24282f;
+}
+
+.sim-run-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.sim-run-option:hover {
+  border-color: #c8102e;
+}
+
+.sim-run-option.selected {
+  border-color: #c8102e;
+  background: #fcedef;
+}
+
+.sim-run-option input[type='radio'],
+.sim-run-checkbox input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: #c8102e;
+}
+
+.sim-run-option > div,
+.sim-run-checkbox > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sim-run-option strong,
+.sim-run-checkbox strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #24282f;
+}
+
+.sim-run-option small,
+.sim-run-checkbox small {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #536170;
+}
+
+/* Configuration fields */
+
+.sim-run-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sim-run-field > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #24282f;
+}
+
+.sim-run-field > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #24282f;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.sim-run-field > input:focus {
+  border-color: #c8102e;
+  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.08);
+}
+
+.sim-run-field > input[aria-invalid='true'] {
+  border-color: #c8102e;
+}
+
+.sim-run-field > input:disabled {
+  background: #f7f8fa;
+  cursor: not-allowed;
+}
+
+.sim-run-field > small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #7b8490;
+}
+
+.sim-run-field > .sim-run-field-error {
+  color: #c8102e;
+}
+
+.sim-run-divider {
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.sim-run-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.sim-run-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  background: #f7f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+/* Notices */
+
+.sim-run-info {
+  padding: 12px 14px;
+  background: #f7f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #536170;
+}
+
+/* Loading state */
+
+.sim-run-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  color: #536170;
+}
+
+.sim-run-loading p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sim-run-progress {
+  align-items: flex-start;
+  border: 1px solid rgba(200, 16, 46, 0.2);
+  border-radius: 10px;
+  background: #fcedef;
+}
+
+.sim-run-progress strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: #a70d27;
+}
+
+.sim-run-progress small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #7b8490;
+}
+
+.sim-run-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(200, 16, 46, 0.18);
+  border-top-color: #c8102e;
+  border-radius: 50%;
+  animation: sim-run-spin 700ms linear infinite;
+}
+
+@keyframes sim-run-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+  .sim-run-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-run-option {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-run-spinner {
+    animation: none;
+  }
+}
