@@ -8,6 +8,7 @@ import { DataPage } from '../modules/data/DataPage';
 import { DigitalTwinPage } from '../modules/digital-twin/DigitalTwinPage';
 import { SimulasiPage } from '../modules/simulasi/SimulasiPage';
 import { EvaluasiPage } from '../modules/evaluasi/EvaluasiPage';
+import { SimulationResultPage } from '../modules/simulasi/SimulationResultPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
             element: <RequirePermission permission={PERM.baselineRead} />,
             children: [
               { path: 'simulasi/:scenarioId?', element: <SimulasiPage /> },
+              { path: 'simulasi/:scenarioId/result', element: <SimulationResultPage /> },
               { path: 'evaluasi', element: <EvaluasiPage /> },
             ],
           },
