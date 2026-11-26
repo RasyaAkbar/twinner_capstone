@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { createScenario, deleteScenario, duplicateScenario, getBaseline, getBaselineById, getScenario, listScenarios, listSituations, saveScenario, updateScenario, } from './api';
 import type { Baseline, Scenario, ScenarioSummary, SituationInfo, } from './types';
@@ -8,6 +8,7 @@ import { ScenarioForm, type Draft } from './ScenarioForm';
 import { createInitialParameters, serializeParameters, SITUATION_ORDER, } from './situations';
 import { mapParameterErrors, mapApiErrors, type FieldErrors, } from './validation';
 import './simulasi.css';
+import { withOriginalTaskEstimate } from './baselineOptions';
 import { SimulationRunDialog } from './SimulationRunDialog';
 import { getRunPreview, runSimulation, getSimulationResult, } from './simulationApi';
 import type { RunPreview, SimulationRunRequest, } from './simulationTypes';
@@ -41,14 +42,22 @@ export function SimulasiPage() {
     const [situations, setSituations] = useState<SituationInfo[]>([]);
     const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
     const [selected, setSelected] = useState<Scenario | null>(null);
-    const [draft, setDraft] = useState<Draft | null>(null);
+    const [rawDraft, setDraft] = useState<Draft | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
-    const [dirty, setDirty] = useState(false);
+    const [draftDirty, setDirty] = useState(false);
+    const draft = useMemo(() => {
+        if (!rawDraft || !scenarioBaseline || !selected) return rawDraft;
+        const parameters = withOriginalTaskEstimate(
+            scenarioBaseline, selected.situation, rawDraft.parameters,
+        );
+        return parameters === rawDraft.parameters ? rawDraft : { ...rawDraft, parameters };
+    }, [rawDraft, scenarioBaseline, selected]);
+    const dirty = draftDirty || draft !== rawDraft;
     const [showSituations, setShowSituations] = useState(true);
     const [search, setSearch] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
