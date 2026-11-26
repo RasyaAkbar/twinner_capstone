@@ -1,0 +1,53 @@
+
+.dt-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.dt-search:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.dt-search > svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
+
+.dt-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-heading);
+  font: 14px var(--font-body);
+}
+
+.dt-search input::placeholder {
+  color: var(--color-muted);
+}
+
+.dt-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.dt-search button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 20px;
+  cursor: pointer;
+}

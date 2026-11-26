@@ -1,0 +1,137 @@
+
+.dt-button {
+  --button-bg: var(--color-primary);
+  --button-color: #ffffff;
+  --button-border: transparent;
+  --button-hover: var(--color-primary-hover);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-control);
+
+  background: var(--button-bg);
+  color: var(--button-color);
+
+  font: var(--text-button);
+  text-decoration: none;
+  white-space: nowrap;
+
+  cursor: pointer;
+  user-select: none;
+
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.dt-button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+
+.dt-button:focus-visible {
+  outline: 3px solid var(--color-info);
+  outline-offset: 3px;
+}
+
+
+.dt-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-button--primary {
+  --button-bg: var(--color-primary);
+  --button-color: #ffffff;
+  --button-hover: var(--color-primary-hover);
+}
+
+.dt-button--secondary {
+  --button-bg: var(--color-primary-light);
+  --button-color: var(--color-primary-hover);
+  --button-hover: #F7DCE2;
+}
+
+.dt-button--outline {
+  --button-bg: transparent;
+  --button-color: var(--color-primary);
+  --button-border: var(--color-primary);
+  --button-hover: var(--color-primary-light);
+}
+
+.dt-button--ghost {
+  --button-bg: transparent;
+  --button-color: var(--color-primary);
+  --button-hover: var(--color-primary-light);
+}
+
+.dt-button--danger {
+  --button-bg: var(--color-danger);
+  --button-color: #ffffff;
+  --button-hover: #A63F49;
+}
+
+.dt-button--sm {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.dt-button--md {
+  min-height: 40px;
+  padding: 10px 16px;
+}
+
+.dt-button--lg {
+  min-height: 48px;
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+.dt-button--full {
+  width: 100%;
+}
+
+.dt-button__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dt-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dt-button__spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: dt-button-spin 700ms linear infinite;
+}
+
+@keyframes dt-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-button {
+    transition: none;
+  }
+
+  .dt-button__spinner {
+    animation-duration: 2s;
+  }
+}
