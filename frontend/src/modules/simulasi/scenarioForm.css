@@ -1,0 +1,196 @@
+.field-toggle {
+  align-items: center;
+  min-height: 42px;
+  padding: var(--space-3) var(--space-4);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.field-toggle input {
+  margin: 0;
+}
+
+.field-toggle:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.field select:disabled {
+  background: var(--color-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+/* Textarea hanya boleh di-resize vertikal; lebar selalu mengikuti form */
+.sim-form .field textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 84px;
+  max-height: 320px;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+
+/* Dynamic scenario parameter form */
+
+.sim-form-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.sim-form-fields:disabled {
+  opacity: 0.7;
+}
+
+.sim-form .field input[readonly] {
+  background: #f7f8fa;
+  cursor: default;
+}
+
+.sim-form input[aria-invalid="true"],
+.sim-form select[aria-invalid="true"],
+.sim-form textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.sim-field-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.sim-field-errors small {
+  color: #dc2626;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sim-option-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.sim-selection-count {
+  display: block;
+  margin-bottom: 8px;
+  color: #7b8490;
+  font-size: 12px;
+}
+
+.sim-array-item {
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.sim-array-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sim-array-heading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sim-subform {
+  min-width: 0;
+}
+
+.sim-subform > .form-grid {
+  margin-top: 8px;
+}
+
+/* Task and assignment selection */
+
+.sim-form .sim-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sim-form .sim-option-list .field-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+.sim-form .sim-option-list .field-check:hover {
+  background: #f7f8fa;
+}
+
+.sim-form .sim-option-list input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: #c8102e;
+}
+
+.sim-form .sim-option-list .field-check span {
+  font-size: 13px;
+  color: #536170;
+}
+
+.sim-form .sim-option-list .field-check:has(input:checked) {
+  background: #fcedef;
+}
+
+.sim-form .sim-subform {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 8px 0;
+}
+
+.sim-form .sim-subform legend {
+  padding: 0 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.sim-form .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.sim-form .field-wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+  .sim-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.sim-form .sim-field-errors small {
+  color: #c8102e;
+  font-size: 12px;
+  font-weight: 500;
+}

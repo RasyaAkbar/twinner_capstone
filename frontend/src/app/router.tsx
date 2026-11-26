@@ -38,7 +38,7 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission={PERM.baselineRead} />,
             children: [
-              { path: 'simulasi', element: <SimulasiPage /> },
+              { path: 'simulasi/:scenarioId?', element: <SimulasiPage /> },
               { path: 'evaluasi', element: <EvaluasiPage /> },
             ],
           },
