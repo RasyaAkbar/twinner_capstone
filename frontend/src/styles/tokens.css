@@ -3,17 +3,17 @@
    dan Typography (1:161). Perbarui di sini kalau Figma berubah. */
 :root {
   /* Brand — section Colors / Brand (1:158) */
-  --color-primary: #217a67;
-  --color-primary-hover: #185f50;
-  --color-primary-light: #e6f3ee;
+  --color-primary: #C8102E;
+  --color-primary-hover: #A70D27;
+  --color-primary-light: #FCEDEF;
 
   /* Neutrals — section Colors / Neutrals (1:159) */
-  --color-bg: #f7f9f8;
+  --color-bg: #F7F8FA;
   --color-surface: #ffffff;
-  --color-border: #e3e9e7;
-  --color-heading: #202d35;
-  --color-body: #536570;
-  --color-muted: #8998a1;
+  --color-border: #E5E7EB;
+  --color-heading: #24282F;
+  --color-body: #536170;
+  --color-muted: #7B8490;
 
   /* Status — section Colors / Status (1:160) */
   --color-success: #278467;

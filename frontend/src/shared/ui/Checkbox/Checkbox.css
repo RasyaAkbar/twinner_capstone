@@ -1,0 +1,44 @@
+
+.dt-checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dt-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.dt-checkbox:focus-visible {
+  outline: 3px solid var(--color-primary-light);
+  outline-offset: 3px;
+}
+
+.dt-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dt-checkbox-field__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dt-checkbox-field__content label {
+  color: var(--color-heading);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.dt-checkbox-field__content span {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

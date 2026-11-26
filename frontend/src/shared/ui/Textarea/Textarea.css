@@ -1,0 +1,5 @@
+.dt-textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.6;
+}

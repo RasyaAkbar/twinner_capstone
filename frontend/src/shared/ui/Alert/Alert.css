@@ -1,0 +1,72 @@
+
+.dt-alert {
+  --alert-bg: #EAF2FC;
+  --alert-border: #C9DDF5;
+  --alert-color: #32689E;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--alert-bg);
+  border: 1px solid var(--alert-border);
+  border-radius: var(--radius-control);
+  color: var(--alert-color);
+  font-family: var(--font-body);
+}
+
+.dt-alert--success {
+  --alert-bg: #F0FAF5;
+  --alert-border: #CBE8DB;
+  --alert-color: #176B50;
+}
+
+.dt-alert--warning {
+  --alert-bg: #FFF7E8;
+  --alert-border: #F2D8A9;
+  --alert-color: #94601D;
+}
+
+.dt-alert--danger {
+  --alert-bg: #FCEDEF;
+  --alert-border: #F0C5CD;
+  --alert-color: #A63F49;
+}
+
+.dt-alert__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dt-alert__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-alert__title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dt-alert__message {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dt-alert__dismiss {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}

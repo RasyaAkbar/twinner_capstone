@@ -1,0 +1,62 @@
+
+.dt-badge {
+  --badge-bg: #F1F3F5;
+  --badge-color: #536170;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--badge-color);
+  font-family: var(--font-body);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.dt-badge--sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.dt-badge--md {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.dt-badge--primary {
+  --badge-bg: #FCEDEF;
+  --badge-color: #A70D27;
+}
+
+.dt-badge--success {
+  --badge-bg: #E6F5EF;
+  --badge-color: #176B50;
+}
+
+.dt-badge--warning {
+  --badge-bg: #FFF3DF;
+  --badge-color: #94601D;
+}
+
+.dt-badge--danger {
+  --badge-bg: #FBE9EB;
+  --badge-color: #A63F49;
+}
+
+.dt-badge--info {
+  --badge-bg: #EAF2FC;
+  --badge-color: #32689E;
+}
+
+.dt-badge__dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}

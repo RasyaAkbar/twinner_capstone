@@ -1,0 +1,83 @@
+
+.dt-toast {
+  --toast-accent: #487DB8;
+
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 12px 36px rgba(36, 40, 47, 0.14);
+  color: var(--color-heading);
+  font-family: var(--font-body);
+  animation: dt-toast-enter 180ms ease-out;
+}
+
+.dt-toast--success { --toast-accent: #278467; }
+.dt-toast--warning { --toast-accent: #AD742A; }
+.dt-toast--danger { --toast-accent: #BE505A; }
+.dt-toast--info { --toast-accent: #487DB8; }
+
+.dt-toast__indicator {
+  width: 4px;
+  align-self: stretch;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--toast-accent);
+}
+
+.dt-toast__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-toast__body strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dt-toast__body p {
+  margin: 5px 0 0;
+  color: var(--color-body);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dt-toast > button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+@keyframes dt-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .dt-toast {
+    top: 16px;
+    right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-toast {
+    animation: none;
+  }
+}
