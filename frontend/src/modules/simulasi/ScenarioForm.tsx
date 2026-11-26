@@ -14,7 +14,7 @@ import {
   getValueLabel,
 } from './situations';
 
-import { getBaselineOptions } from './baselineOptions';
+import { getBaselineOptions, withOriginalTaskEstimate } from './baselineOptions';
 import { getFieldErrors, type FieldErrors } from './validation';
 
 import './scenarioForm.css';
@@ -64,11 +64,13 @@ export function ScenarioForm({
             <ErrorMessages messages={errors.name ?? []} />
           </label>
 
-          <div className="field field-wide">
-            <span>Situasi keputusan</span>
-            <input value={situation.label} readOnly />
-            <small>{situation.description}</small>
-          </div>
+          <LockedField
+            label="Situasi keputusan"
+            value={situation.label}
+            status="Terkunci"
+            hint={situation.description}
+            wide
+          />
 
           {Object.entries(root.properties ?? {}).map(
             ([key, field]) => (
@@ -131,7 +133,12 @@ export function ScenarioForm({
                     parameters.independent_task_ids = [];
                   }
 
-                  onChange({ ...draft, parameters });
+                  onChange({
+                    ...draft,
+                    parameters: withOriginalTaskEstimate(
+                      baseline, situation.situation, parameters,
+                    ),
+                  });
                 }}
               />
             ),
@@ -174,6 +181,38 @@ function ErrorMessages({
   );
 }
 
+function LockedField({ label, value, status, hint, placeholder, wide = false, messages = [] }: {
+  label: string;
+  value: string;
+  status: string;
+  hint: string;
+  placeholder?: string;
+  wide?: boolean;
+  messages?: string[];
+}) {
+  const id = useId();
+  return (
+    <div className={`field sim-locked-field${wide ? ' field-wide' : ''}`}>
+      <label className="sim-locked-label" htmlFor={id}>
+        <span>{label}</span>
+        <small>{status}</small>
+      </label>
+      <div className="sim-locked-control">
+        <input id={id} value={value} placeholder={placeholder} disabled readOnly
+          aria-invalid={messages.length > 0} aria-describedby={`${id}-hint`} />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="11" rx="2" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          <path d="M12 14v3" />
+        </svg>
+      </div>
+      <small id={`${id}-hint`}>{hint}</small>
+      <ErrorMessages messages={messages} />
+    </div>
+  );
+}
+
 function ParameterField(props: FieldProps) {
   const {
     fieldKey,
@@ -206,6 +245,24 @@ function ParameterField(props: FieldProps) {
       : String(value);
 
   const invalid = messages.length > 0;
+
+  if (situation.situation === 'task_overrun' && path === 'original_days') {
+    const original = withOriginalTaskEstimate(
+      baseline, situation.situation, parameters,
+    ).original_days;
+    return (
+      <LockedField
+        label={label}
+        value={typeof original === 'number' ? String(original) : ''}
+        status="Otomatis"
+        placeholder="Pilih task terlebih dahulu"
+        hint={parameters.task_id && typeof original !== 'number'
+          ? 'Estimasi awal tidak tersedia pada snapshot.'
+          : 'Diambil dari data task dan tidak dapat diubah.'}
+        messages={messages}
+      />
+    );
+  }
 
   // Nested objects, such as absence_period.
   if (schema.type === 'object') {

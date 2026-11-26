@@ -213,3 +213,25 @@ export function getBaselineOptions(
   // Not a baseline entity field.
   return null;
 }
+
+// Task Overrun must use the estimate from the scenario's own snapshot.
+export function withOriginalTaskEstimate(
+  baseline: Baseline,
+  situation: Situation,
+  parameters: Parameters,
+): Parameters {
+  if (situation !== 'task_overrun') return parameters;
+
+  const task = baseline.tasks.find(
+    (item) => item.task_id === parameters.task_id,
+  );
+  const estimate = task?.estimated_days;
+  const original = typeof estimate === 'number' &&
+    Number.isFinite(estimate) && estimate > 0 ? estimate : '';
+
+  if (parameters.original_days === original ||
+      (original === '' && parameters.original_days === undefined)) {
+    return parameters;
+  }
+  return { ...parameters, original_days: original };
+}
