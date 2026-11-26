@@ -31,6 +31,7 @@
 .nav-link:hover { background: var(--color-bg); color: var(--color-heading); }
 .nav-link.active { background: var(--color-primary-light); color: var(--color-primary); }
 .nav-link span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dss-mode-switch { margin-bottom: var(--space-5); }
 
 .context-section { padding: var(--space-8) var(--space-5) 0; }
 .context-card { margin: var(--space-4) 0 0; padding: var(--space-4); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-card); }

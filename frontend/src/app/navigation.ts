@@ -10,4 +10,5 @@ export const navigation: readonly NavItem[] = [
   { path: '/digital-twin', label: 'Digital Twin', icon: 'layout-dashboard', description: 'Kondisi baseline model: timeline proyek, beban resource, dan dependency antar task.', permission: PERM.baselineRead },
   { path: '/simulasi', label: 'Simulasi', icon: 'sliders-horizontal', description: 'Eksplorasi skenario dan perubahan pada rencana proyek.', permission: PERM.baselineRead },
   { path: '/evaluasi', label: 'Evaluasi', icon: 'chart-column', description: 'Tinjau hasil simulasi dan perbandingan dengan baseline.', permission: PERM.baselineRead },
+  { path: '/dss', label: 'Rekomendasi', icon: 'list-checks', description: 'Rekomendasi aksi berdasarkan kondisi baseline dan hasil simulasi.', permission: PERM.baselineRead },
 ];

@@ -9,6 +9,8 @@ import { DigitalTwinPage } from '../modules/digital-twin/DigitalTwinPage';
 import { SimulasiPage } from '../modules/simulasi/SimulasiPage';
 import { EvaluasiPage } from '../modules/evaluasi/EvaluasiPage';
 import { SimulationResultPage } from '../modules/simulasi/SimulationResultPage';
+import { DssPage } from '../modules/dss/DssPage';
+
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -42,6 +44,7 @@ export const router = createBrowserRouter([
               { path: 'simulasi/:scenarioId?', element: <SimulasiPage /> },
               { path: 'simulasi/:scenarioId/result', element: <SimulationResultPage /> },
               { path: 'evaluasi', element: <EvaluasiPage /> },
+              { path: 'dss', element: <DssPage /> },
             ],
           },
           { path: '*', element: <section className="empty-state"><h2>Halaman tidak ditemukan</h2><Link to="/">Kembali ke halaman awal</Link></section> },
