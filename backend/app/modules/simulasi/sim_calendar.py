@@ -6,7 +6,8 @@ Untuk setiap anggota dan setiap hari kerja mulai `start_date`, kalender menghitu
   maupun mendadak), sebelum `join_date`, dan setelah anggota keluar; pecahan selama onboarding
   (naik linier dari kapasitas awal ke 1); 1 selain itu.
 - `capacity` = `capacity_reference` peran utama (D-03) x `availability`, dalam satuan beban
-  yang sama dengan `load_weight` level kompleksitas (D-04). Ini penyebut Resource Load Index.
+  yang sama dengan `load_weight` level kompleksitas (D-04). Ini penyebut utilisasi kapasitas
+  harian penjadwal; Resource Load Index (FR-04.3) dihitung terpisah oleh modul Evaluasi.
 - `non_project`: bagian hari yang dipakai item D-08 (operasional, tiket, hotfix) dan perbaikan
   bug skenario. Jumlahnya boleh lebih dari 1; kelebihannya terlihat sebagai beban berlebih.
 - `mentoring`: bagian hari yang dipakai membimbing anggota baru.

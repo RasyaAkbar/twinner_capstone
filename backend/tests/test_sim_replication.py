@@ -1,4 +1,4 @@
-"""SCRUM-27: replikasi Monte Carlo dengan median dan rentang, tanpa basis data."""
+"""SCRUM-27: replikasi Monte Carlo dengan median dan rentang KPI evaluasi, tanpa basis data."""
 
 import random
 import tempfile
@@ -9,9 +9,17 @@ from pathlib import Path
 
 import pytest
 
+from app.modules.evaluasi.kpi_comparator import compare
+from app.modules.evaluasi.kpi_definitions import (
+    KPI_BY_KEY,
+    KPI_KEYS,
+    ON_TIME_PROBABILITY,
+    RESOURCE_LOAD_INDEX,
+    SCHEDULE_VARIANCE,
+    KpiStatus,
+)
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import MemberAbsenceParams, TaskOverrunParams
-from app.modules.simulasi.sim_kpi import KPI_DEFINITIONS, KpiStatus
 from app.modules.simulasi.sim_replication import (
     DEFAULT_RUNS,
     MIN_EFFORT,
@@ -128,10 +136,13 @@ def test_replications_are_reproducible_with_a_seed():
 
 def test_same_draws_for_baseline_and_scenario_leave_no_difference():
     summary = run_replications(WORLD, deepcopy(WORLD), runs=25, seed=3)
-    for definition in KPI_DEFINITIONS:
-        stats = summary.kpis[definition.key]
-        assert (stats.delta.min, stats.delta.max) == (0.0, 0.0), definition.key
-        assert stats.status == KpiStatus.SAME
+    for key in KPI_KEYS:
+        if key == ON_TIME_PROBABILITY:
+            continue
+        delta = summary.kpis.ranges[key]["delta"]
+        # KPI tanpa nilai (misalnya Rework Rate tanpa task QA) tidak punya selisih.
+        assert (delta.min, delta.max) in ((0.0, 0.0), (None, None)), key
+    assert summary.kpis.on_time["baseline"] == summary.kpis.on_time["scenario"]
     tasks = summary.tasks["TSK-0002"]
     assert tasks.baseline_finish == tasks.scenario_finish
 
@@ -139,12 +150,15 @@ def test_same_draws_for_baseline_and_scenario_leave_no_difference():
 def test_median_and_range_are_reported_for_kpis_tasks_projects_and_members():
     summary = run_replications(WORLD, deepcopy(WORLD), runs=40, seed=9)
     assert (summary.runs, summary.seed) == (40, 9)
-    completion = summary.kpis["completion_date"].baseline
-    assert completion.runs == 40
-    assert completion.min <= completion.p10 <= completion.median <= completion.p90
-    assert completion.p90 <= completion.max
+    sv = summary.kpis.ranges[SCHEDULE_VARIANCE]["baseline"]
+    assert sv.runs == 40
+    assert sv.min <= sv.p10 <= sv.median <= sv.p90 <= sv.max
+    completion = summary.projects["PRJ-001"].baseline_completion
     # Effort 2..6 hari per task: paling cepat 05 + (2 + 2) hari kerja, paling lambat 12 hari.
     assert d(8) <= completion.min and completion.max <= d(20)
+    assert summary.projects["PRJ-001"].baseline_sv.runs == 40
+    assert 0.0 <= summary.projects["PRJ-001"].baseline_on_time_probability <= 1.0
+    assert summary.kpis.ranges[RESOURCE_LOAD_INDEX]["baseline"].runs == 40
     finish = summary.tasks["TSK-0002"].baseline_finish
     assert finish.runs == 40 and finish.min <= finish.median <= finish.max
     assert summary.projects["PRJ-001"].baseline_completion.median is not None
@@ -160,12 +174,19 @@ def test_fixed_scenario_estimate_is_not_drawn_and_shifts_every_replication():
     scenario = apply_scenario(WORLD, Situation.TASK_OVERRUN, params).world
     summary = run_replications(WORLD, scenario, runs=30, seed=1)
     # Baseline TSK-0001 paling lama 6 hari; skenario selalu 8 hari, jadi selalu lebih lambat.
-    delta = summary.kpis["completion_date"].delta
-    assert delta.min > 0
-    assert summary.kpis["completion_date"].status == KpiStatus.WORSE
-    assert summary.tasks["TSK-0001"].scenario_finish.min == summary.tasks[
-        "TSK-0001"
-    ].scenario_finish.max
+    ranges = summary.kpis.ranges[SCHEDULE_VARIANCE]
+    assert ranges["delta"].min > 0
+    status = compare(
+        KPI_BY_KEY[SCHEDULE_VARIANCE],
+        ranges["baseline"].median,
+        ranges["scenario"].median,
+        delta=ranges["delta"].median,
+    )[1]
+    assert status == KpiStatus.WORSE
+    assert (
+        summary.tasks["TSK-0001"].scenario_finish.min
+        == summary.tasks["TSK-0001"].scenario_finish.max
+    )
 
 
 def _synthetic_snapshot() -> BaselineSnapshotData:
@@ -193,9 +214,7 @@ def _synthetic_snapshot() -> BaselineSnapshotData:
 def test_default_run_count_finishes_quickly_on_the_synthetic_dataset():
     snapshot = _synthetic_snapshot()
     baseline = build_world(snapshot)
-    member = next(
-        t.owner for t in baseline.tasks.values() if t.owner and baseline.schedulable(t)
-    )
+    member = next(t.owner for t in baseline.tasks.values() if t.owner and baseline.schedulable(t))
     params = MemberAbsenceParams.model_validate(
         {
             "resource_id": member,

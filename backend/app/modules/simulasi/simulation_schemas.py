@@ -1,4 +1,8 @@
-"""Skema API menjalankan simulasi (UC-03, SCRUM-28) dan melihat hasilnya (UC-04, SCRUM-29)."""
+"""Skema API menjalankan simulasi (UC-03, SCRUM-28) dan melihat hasilnya (UC-04, SCRUM-29).
+
+KPI hasil simulasi memakai skema dan rumus KPI evaluasi (`KpiEvaluationItem`, FR-04.1 s.d.
+FR-04.10) dengan konfigurasi bawaan, sehingga sama dengan hasil modul Evaluasi.
+"""
 
 from datetime import date, datetime
 from enum import StrEnum
@@ -6,8 +10,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.evaluasi.kpi_definitions import EvaluationConfig
+from app.modules.evaluasi.schemas import KpiEvaluationItem, StatusCount
 from app.modules.simulasi.scenario_schemas import ParameterIssue, ScenarioSummary
-from app.modules.simulasi.sim_kpi import KpiStatus, KpiUnit
 from app.modules.simulasi.sim_replication import DEFAULT_RUNS, DEFAULT_SEED, MAX_RUNS, MIN_RUNS
 from app.modules.simulasi.sim_scheduler import TaskState, WarningCode
 from app.modules.simulasi.snapshot_schemas import DataSource, IsoDate
@@ -70,27 +75,6 @@ class Range(BaseModel):
     missing: int = Field(0, description="Jumlah replikasi tanpa nilai (misalnya tidak terjadwal)")
 
 
-class KpiReplication(BaseModel):
-    baseline: Range
-    scenario: Range
-    delta: Range = Field(description="Selisih skenario - baseline per replikasi")
-    status: KpiStatus = Field(description="Status menurut median selisih")
-
-
-class KpiResult(BaseModel):
-    key: str
-    label: str
-    unit: KpiUnit
-    better: Literal["lower"] = Field(description="Arah nilai yang lebih baik")
-    definition: str
-    formula: str
-    baseline: Value
-    scenario: Value
-    delta: float | None = Field(description="Skenario - baseline; hari kerja untuk tanggal")
-    status: KpiStatus
-    replication: KpiReplication | None = None
-
-
 class TaskSchedule(BaseModel):
     state: TaskState
     start: date | None
@@ -132,16 +116,27 @@ class ProjectSide(BaseModel):
     priority_rank: int
     target_launch_date: date
     completion: date | None
-    delay_days: int | None = Field(description="Hari kerja setelah target rilis")
-    on_target: bool | None
+    schedule_variance: int | None = Field(
+        None,
+        description="Schedule Variance proyek (FR-04.1): hari kerja dari target rilis ke "
+        "proyeksi selesai, + = terlambat; kosong bila tidak dapat diluncurkan",
+    )
+    delay_days: int | None = Field(
+        description="Keterlambatan setelah target rilis (hari kerja) = max(Schedule Variance, 0)"
+    )
+    on_target: bool | None = Field(description="Diluncurkan tepat waktu (Schedule Variance <= 0)")
     unscheduled_tasks: int
 
 
 class ProjectReplication(BaseModel):
     baseline_completion: Range
     scenario_completion: Range
-    baseline_delay: Range
-    scenario_delay: Range
+    baseline_sv: Range = Field(description="Schedule Variance proyek di antara replikasi")
+    scenario_sv: Range
+    baseline_on_time_probability: float | None = Field(
+        description="On-Time Launch Probability proyek (FR-04.2)"
+    )
+    scenario_on_time_probability: float | None
 
 
 class ProjectResult(BaseModel):
@@ -164,14 +159,17 @@ class MemberDayLoad(BaseModel):
     scenario_capacity: float = Field(description="Kapasitas skenario hari itu (satuan beban)")
     scenario_absence: str | None
     scenario_tasks: list[str]
-    baseline_overloaded: bool
-    overloaded: bool = Field(description="Beban skenario di atas 100% kapasitas")
+    baseline_over_capacity: bool
+    over_capacity: bool = Field(
+        description="Beban harian skenario di atas 100% kapasitas (bukan Overload Flag, yang "
+        "memakai Resource Load Index mingguan)"
+    )
 
 
 class PeriodReplication(BaseModel):
-    baseline: Range
+    baseline: Range = Field(description="Resource Load Index minggu ini di antara replikasi")
     scenario: Range
-    baseline_overloaded_runs: int
+    baseline_overloaded_runs: int = Field(description="Replikasi dengan RLI di atas threshold")
     scenario_overloaded_runs: int
 
 
@@ -180,13 +178,20 @@ class MemberPeriod(BaseModel):
 
     period_start: date
     period_end: date
-    baseline_load: float | None = Field(description="Rata-rata beban harian pada hari kerja")
+    baseline_rli: float | None = Field(
+        description="Resource Load Index minggu ini (FR-04.3); kosong bila tidak bekerja"
+    )
+    scenario_rli: float | None
+    baseline_overloaded: bool = Field(description="RLI baseline di atas threshold (FR-04.4)")
+    overloaded: bool = Field(description="RLI skenario di atas threshold (FR-04.4)")
+    baseline_load: float | None = Field(
+        description="Rata-rata utilisasi kapasitas harian pada hari kerja"
+    )
     scenario_load: float | None
     baseline_peak: float | None
     scenario_peak: float | None
-    baseline_overloaded_days: int
-    scenario_overloaded_days: int
-    overloaded: bool = Field(description="Ada hari berbeban berlebih di skenario")
+    baseline_over_capacity_days: int = Field(description="Hari beban di atas 100% kapasitas")
+    scenario_over_capacity_days: int
     replication: PeriodReplication | None = None
 
 
@@ -197,10 +202,16 @@ class MemberResult(BaseModel):
     added: bool = Field(description="Anggota baru dari skenario New Member")
     targeted: bool
     affected: bool
-    baseline_peak_load: float | None
+    baseline_peak_rli: float | None = Field(description="RLI mingguan tertinggi (FR-04.3)")
+    scenario_peak_rli: float | None
+    baseline_overloaded_weeks: int = Field(description="Minggu dengan Overload Flag (FR-04.4)")
+    scenario_overloaded_weeks: int
+    baseline_soi: float = Field(description="Sustained Overload Indicator anggota (FR-04.6)")
+    scenario_soi: float
+    baseline_peak_load: float | None = Field(description="Utilisasi kapasitas harian tertinggi")
     scenario_peak_load: float | None
-    baseline_overloaded_days: int
-    scenario_overloaded_days: int
+    baseline_over_capacity_days: int
+    scenario_over_capacity_days: int
     periods: list[MemberPeriod]
     days: list[MemberDayLoad]
 
@@ -223,7 +234,9 @@ class ResultSummary(BaseModel):
     affected_tasks: int
     affected_members: int
     unscheduled_tasks: int = Field(description="Task tidak terjadwal di skenario")
-    overloaded_members: int = Field(description="Anggota yang berbeban berlebih di skenario")
+    overloaded_members: int = Field(
+        description="Anggota dengan Overload Flag (RLI mingguan di atas threshold) di skenario"
+    )
 
 
 class SimulationResult(BaseModel):
@@ -246,7 +259,11 @@ class SimulationResult(BaseModel):
     created_at: datetime | None
     created_by: str | None
     summary: ResultSummary
-    kpis: list[KpiResult]
+    kpi_config: EvaluationConfig = Field(
+        description="Parameter rumus KPI yang dipakai (FR-04.11, bawaan modul Evaluasi)"
+    )
+    kpi_summary: StatusCount = Field(description="Jumlah KPI better, same, dan worse")
+    kpis: list[KpiEvaluationItem] = Field(description="KPI FR-04.1 s.d. FR-04.10")
     projects: list[ProjectResult]
     tasks: list[TaskResult]
     members: list[MemberResult]

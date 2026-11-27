@@ -1,22 +1,19 @@
-"""KPI hasil simulasi dan perbandingannya (dipakai UC-03/SCRUM-28), dengan contoh hitungan manual.
+"""Keluaran simulasi bersama (UC-03/SCRUM-28) untuk KPI evaluasi, dengan contoh hitungan manual.
 
-    PRJ-001 target Rabu 07: TSK-0001 3 hari 05-07, TSK-0002 hard <- TSK-0001, 08-09
-        -> selesai 09, terlambat 2 hari kerja (08, 09)
-    PRJ-002 target 30: TSK-0101 2 hari 05-06 -> tepat waktu
-    PRJ-003 target 30: TSK-0201 butuh ROLE-QA yang tidak dimiliki siapa pun -> tidak terjadwal
+PRJ-001 target Rabu 07: TSK-0001 3 hari 05-07, TSK-0002 hard <- TSK-0001, 08-09
+    -> selesai 09, terlambat 2 hari kerja (08, 09)
+PRJ-002 target 30: TSK-0101 2 hari 05-06 -> tepat waktu
+PRJ-003 target 30: TSK-0201 butuh ROLE-QA yang tidak dimiliki siapa pun -> tidak terjadwal
 """
 
 from datetime import date
 
 import pytest
 
+from app.modules.evaluasi.kpi_calculator import schedule_variances
+from app.modules.simulasi import sim_kpi
 from app.modules.simulasi.sim_calendar import CapacityCalendar
 from app.modules.simulasi.sim_kpi import (
-    KPI_BY_KEY,
-    KPI_DEFINITIONS,
-    KpiStatus,
-    calculate_kpis,
-    compare_values,
     delay_after,
     member_loads,
     project_outcomes,
@@ -95,22 +92,25 @@ def test_project_outcomes():
     )
 
 
-def test_kpi_values_from_the_simulation_output():
-    loads = member_loads(WORLD, RESULT, CALENDAR, RESULT.end_date)
-    kpis = calculate_kpis(WORLD, RESULT, loads)
-    assert kpis == {
-        "completion_date": d(9),
-        "total_delay_days": 2.0,
-        # PRJ-001 terlambat dan PRJ-003 punya task tidak terjadwal.
-        "projects_missing_target": 2.0,
-        # TSK-0002 rencana mulai 05, dependency baru terpenuhi 08.
-        "dependency_delayed_tasks": 1.0,
-        "peak_load": 1.0,
-        "overloaded_member_days": 0.0,
-        "unscheduled_tasks": 1.0,
-        "dropped_tasks": 0.0,
-    }
-    assert list(kpis) == [definition.key for definition in KPI_DEFINITIONS]
+def test_project_delay_and_on_target_agree_with_schedule_variance():
+    """Keterlambatan proyek di layar hasil simulasi = max(SV, 0) KPI evaluasi (FR-04.1)."""
+    variances = schedule_variances(WORLD, RESULT)
+    assert variances["PRJ-001"] == 2
+    assert variances["PRJ-002"] < 0
+    # Tidak dapat diluncurkan: SV kosong.
+    assert variances["PRJ-003"] is None
+    for project_id, outcome in project_outcomes(WORLD, RESULT).items():
+        sv = variances[project_id]
+        if sv is None:
+            assert not outcome.on_target
+            continue
+        assert outcome.delay_days == max(sv, 0)
+        assert outcome.on_target == (sv <= 0)
+
+
+def test_kpis_are_only_defined_by_the_evaluasi_module():
+    for name in ("KPI_DEFINITIONS", "KPI_BY_KEY", "calculate_kpis", "compare_values"):
+        assert not hasattr(sim_kpi, name)
 
 
 def test_member_loads_extend_to_a_common_end_date_with_non_project_load_only():
@@ -120,37 +120,11 @@ def test_member_loads_extend_to_a_common_end_date_with_non_project_load_only():
     assert [m.load for m in loads["RES-002"]][:3] == [1.0, 1.0, 0.0]
 
 
-def test_every_kpi_is_lower_is_better_with_a_definition():
-    for definition in KPI_DEFINITIONS:
-        assert definition.better == "lower"
-        assert definition.definition and definition.formula
-    assert KPI_BY_KEY["completion_date"].unit == "date"
-
-
-@pytest.mark.parametrize(
-    ("key", "baseline", "scenario", "delta", "status"),
-    [
-        ("completion_date", d(5), d(9), 4.0, KpiStatus.WORSE),
-        ("completion_date", d(9), d(5), -4.0, KpiStatus.BETTER),
-        ("completion_date", d(9), d(9), 0.0, KpiStatus.SAME),
-        # Tanpa proyeksi selesai di skenario lebih buruk; di keduanya sama.
-        ("completion_date", d(9), None, None, KpiStatus.WORSE),
-        ("completion_date", None, d(9), None, KpiStatus.BETTER),
-        ("completion_date", None, None, None, KpiStatus.SAME),
-        ("total_delay_days", 2.0, 5.0, 3.0, KpiStatus.WORSE),
-        ("unscheduled_tasks", 3.0, 1.0, -2.0, KpiStatus.BETTER),
-        ("peak_load", 0.8, 0.8, 0.0, KpiStatus.SAME),
-    ],
-)
-def test_compare_gives_delta_and_status(key, baseline, scenario, delta, status):
-    assert compare_values(KPI_BY_KEY[key], baseline, scenario, HOLIDAYS) == (delta, status)
-
-
 def _day(day: date, load: float | None) -> MemberDay:
     return MemberDay(day, 1.0, 1.0, 0.0, 0.0, 0.0, load, None, ())
 
 
-def test_weekly_loads_average_working_days_and_count_overloaded_days():
+def test_weekly_loads_average_working_days_and_count_over_capacity_days():
     days = [
         _day(d(5), 1.0),
         _day(d(6), 1.0),
@@ -162,7 +136,7 @@ def test_weekly_loads_average_working_days_and_count_overloaded_days():
     weeks = weekly_loads(days)
     first = weeks[d(5)]
     # (1.0 + 1.0 + 0.5 + 2.0) / 4 hari kerja; hari absen tidak dihitung.
-    assert (first.average, first.peak, first.overloaded_days, first.working_days) == (
+    assert (first.average, first.peak, first.over_capacity_days, first.working_days) == (
         1.125,
         2.0,
         1,

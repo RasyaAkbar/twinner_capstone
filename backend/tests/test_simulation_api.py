@@ -7,6 +7,8 @@ SCRUM-15 (fixture dari test_scenario_api.py). Peta izin endpoint ada di test_sce
 
 from collections import defaultdict
 
+from app.modules.evaluasi.kpi_definitions import KPI_KEYS as EVALUASI_KPI_KEYS
+from app.modules.simulasi.simulation_models import SimulationRun
 from tests.conftest import REQUIRES_DB
 from tests.test_scenario_api import (  # noqa: F401  (fixture pytest)
     SCENARIOS,
@@ -21,16 +23,8 @@ from tests.test_scenario_api import (  # noqa: F401  (fixture pytest)
 # Hari kerja pertama setelah realisasi terakhir data sintetis per 2026-11-06 (Jumat).
 DEFAULT_START = "2026-11-09"
 ACTIVE_PROJECT_STATUSES = ("planning", "development", "testing")
-KPI_KEYS = [
-    "completion_date",
-    "total_delay_days",
-    "projects_missing_target",
-    "dependency_delayed_tasks",
-    "peak_load",
-    "overloaded_member_days",
-    "unscheduled_tasks",
-    "dropped_tasks",
-]
+# KPI hasil simulasi = KPI evaluasi (FR-04.1 s.d. FR-04.10).
+KPI_KEYS = list(EVALUASI_KPI_KEYS)
 
 
 def run(client, scenario_id: int, **body):
@@ -224,8 +218,12 @@ class TestSimulationApi:
         ]
         assert len(unscheduled) == result["summary"]["unscheduled_tasks"] > 0
         assert all(t["scenario"]["reason"] for t in unscheduled)
-        kpi = next(k for k in result["kpis"] if k["key"] == "unscheduled_tasks")
-        assert (kpi["scenario"] > kpi["baseline"], kpi["status"]) == (True, "worse")
+        # Proyek dengan task tidak terjadwal tidak dapat diluncurkan: SV kosong (FR-04.1).
+        sv = next(k for k in result["kpis"] if k["key"] == "schedule_variance")
+        assert sv["scenario"] is None
+        assert sv["status"] == ("worse" if sv["baseline"] is not None else "same")
+        on_time = next(k for k in result["kpis"] if k["key"] == "on_time_probability")
+        assert on_time["scenario"] == 0.0
         # Task lain tetap dijadwalkan.
         assert any(t["scenario"] and t["scenario"]["state"] == "scheduled" for t in result["tasks"])
 
@@ -238,8 +236,9 @@ class TestSimulationApi:
         assert first.status_code == 200, first.text
         result = first.json()
         assert result["replication"] == {"runs": 20, "seed": 7}
-        completion = next(k for k in result["kpis"] if k["key"] == "completion_date")
-        stats = completion["replication"]["scenario"]
+        rli = next(k for k in result["kpis"] if k["key"] == "resource_load_index")
+        assert rli["basis"] == "median"
+        stats = rli["replication"]["scenario"]
         assert stats["runs"] == 20
         assert stats["min"] <= stats["median"] <= stats["max"]
         task = next(t for t in result["tasks"] if t["replication"] is not None)
@@ -292,8 +291,11 @@ class TestSimulationApi:
         assert drilldown["member"]["resource_id"] == member
         days = drilldown["member"]["days"]
         assert days and days[0]["day"] == DEFAULT_START
-        assert all("overloaded" in day and "scenario_load" in day for day in days)
-        assert drilldown["member"]["periods"]
+        assert all("over_capacity" in day and "scenario_load" in day for day in days)
+        periods = drilldown["member"]["periods"]
+        assert periods
+        # Overload per minggu mengikuti RLI (FR-04.3, FR-04.4).
+        assert all("scenario_rli" in p and "overloaded" in p for p in periods)
         assert any(t["task_id"] == params["task_id"] for t in drilldown["tasks"])
 
     def test_drilldown_of_unknown_items_is_404(self, client, baseline):
@@ -316,6 +318,31 @@ class TestSimulationApi:
         stored = client.get(f"{url}/result").json()
         assert stored["is_stale"] is True
         assert stored["scenario"]["status"] == "draft"
+
+    def test_result_saved_with_the_old_kpi_list_is_rebuilt_with_evaluasi_kpis(
+        self, client, baseline, db
+    ):
+        scenario = create(client, parameters=active_overrun(baseline))
+        url = f"{SCENARIOS}/{scenario['scenario_id']}"
+        saved = run(client, scenario["scenario_id"], mode="run_and_save").json()
+        # Hasil yang tersimpan sebelum KPI mengikuti modul Evaluasi (SCRUM-28).
+        row = db.get(SimulationRun, saved["run_id"])
+        legacy = {**row.result, "kpis": [{"key": "completion_date", "better": "lower"}]}
+        legacy.pop("kpi_config")
+        legacy.pop("kpi_summary")
+        row.result = legacy
+        db.commit()
+
+        opened = client.get(f"{url}/result")
+
+        assert opened.status_code == 200, opened.text
+        rebuilt = opened.json()
+        assert [k["key"] for k in rebuilt["kpis"]] == KPI_KEYS
+        assert rebuilt["kpis"] == saved["kpis"]
+        assert (rebuilt["run_id"], rebuilt["saved"]) == (saved["run_id"], True)
+        db.expire_all()
+        stored = db.get(SimulationRun, saved["run_id"])
+        assert [k["key"] for k in stored.result["kpis"]] == KPI_KEYS
 
     def test_results_are_deleted_with_their_scenario(self, client, baseline):
         scenario = create(client, parameters=active_overrun(baseline))

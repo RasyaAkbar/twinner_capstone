@@ -94,7 +94,7 @@ export function ComplexityPanel() {
       <div className="panel-heading">
         <div>
           <h2 id="complexity-title">Level kompleksitas</h2>
-          <p className="panel-subtitle">D-04 complexity_levels. Rentang hari dipakai untuk estimasi, bobot dipakai untuk Resource Load Index.</p>
+          <p className="panel-subtitle">D-04 complexity_levels. Rentang hari dipakai untuk estimasi, bobot dipakai untuk beban harian di simulasi.</p>
         </div>
       </div>
 

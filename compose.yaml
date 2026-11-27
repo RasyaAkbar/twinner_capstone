@@ -1,3 +1,13 @@
+# Development lokal: seluruh aplikasi (PostgreSQL, migrasi, API, frontend) dalam satu perintah.
+#
+#   docker compose up -d --build      lalu buka http://localhost:8080
+#
+# Hanya database (untuk menjalankan API/frontend dari terminal seperti di README):
+#   docker compose up -d db
+#
+# Nilai bawaan aman hanya untuk lokal (APP_ENV=development, JWT dev). Untuk staging/produksi
+# pakai compose.prod.yaml (docs/DEPLOYMENT.md).
+
 services:
   db:
     image: postgres:17-alpine
@@ -14,7 +24,45 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  migrate:
+    image: jc-api:dev
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &api-env
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-puti}:${POSTGRES_PASSWORD:-puti_local}@db:5432/${POSTGRES_DB:-digital_twin}
+      # Frontend dan API satu origin lewat nginx, jadi CORS tidak dibutuhkan.
+      CORS_ORIGINS: "[]"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: jc-api:dev
+    environment:
+      <<: *api-env
+      # Lokal saja: percayai X-Forwarded-For dari nginx di jaringan compose.
+      FORWARDED_ALLOW_IPS: "*"
+    ports:
+      # Swagger di http://localhost:8000/docs
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    image: jc-web:dev
+    build: ./frontend
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-
