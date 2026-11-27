@@ -6,6 +6,7 @@ Mesin simulasi menjalankan baseline snapshot ([BASELINE_SNAPSHOT.md](BASELINE_SN
 | --- | --- | --- | --- |
 | 1 | Muat baseline snapshot sebagai dunia simulasi | `sim_world.py` | SCRUM-15 |
 | 2 | Terapkan aturan situasi pada salinan baseline | `sim_rules.py` | SCRUM-24 |
+| 2b | Terapkan respons kandidat DSS (bila ada) pada salinan skenario | `sim_actions.py` | SCRUM-63 |
 | 3 | Hitung kapasitas setiap anggota per hari kerja | `sim_calendar.py` | SCRUM-25 |
 | 4-5 | Jadwalkan task hari demi hari, catat jadwal dan beban | `sim_scheduler.py` | SCRUM-26 |
 | 6 | Ubah hasil menjadi KPI dan bandingkan dengan baseline | `sim_kpi.py` | SCRUM-28 (dasar SCRUM-32) |
@@ -43,7 +44,7 @@ Asumsi berikut berlaku untuk baseline maupun skenario, sehingga selisih keduanya
 | Task blocked di baseline | Dianggap dapat dilanjutkan mulai tanggal mulai simulasi (dicatat di `notes`). | |
 | Proyek dan task on hold | Tidak dijadwalkan; task yang bergantung padanya tidak terjadwal. Priority Change dapat mengaktifkan proyek on hold. | |
 | Pemilik task | Penugasan aktif terakhir (D-07). Task tanpa penugasan masuk pool dan diambil anggota berperan sama (utama atau sekunder) yang kapasitas bebasnya paling longgar pada hari task siap, lalu tetap miliknya. Penugasan yang berakhir di masa depan melepas task pada hari berikutnya. | |
-| Ketidakhadiran | Cuti terencana, mendadak, dan melahirkan (D-09) membuat kapasitas 0; task anggota itu menunggu, tidak dialihkan otomatis (pengalihan adalah keputusan, SCRUM-36). `is_known_at_planning` dicatat per hari sebagai `planned`. | |
+| Ketidakhadiran | Cuti terencana, mendadak, dan melahirkan (D-09) membuat kapasitas 0; task anggota itu menunggu, tidak dialihkan otomatis (pengalihan adalah keputusan; DSS mencobanya sebagai respons, lihat [Respons DSS](#respons-dss-scrum-63)). `is_known_at_planning` dicatat per hari sebagai `planned`. | |
 | Rotasi keluar di baseline | `rotation_out` berarti bekerja di unit lain: task terbuka anggota itu yang jatuh di masa rotasi dilepas ke pool sejak rotasi dimulai. `rotation_in` adalah kedatangan, bukan ketidakhadiran. | |
 | Beban non-proyek (D-08) | Item memakai bagian hari kerja anggota dari `started_date` (atau `received_date`) sampai `resolved_date`: critical 100%, high 50%, medium 25%, low 25%, tanpa severity 25%; hotfix selalu 100% (preemption). Item belum selesai dianggap selesai 2 hari kerja setelah dilanjutkan. | `ITEM_SHARE` (*), `OPEN_ITEM_DAYS` = 2 (*) |
 | Dependency | Task boleh mulai setelah pendahulunya menyelesaikan paling sedikit `propagation_factor` bagian effort-nya (dinilai pada akhir hari kerja sebelumnya). Hard (1.0) = pendahulu selesai. Pendahulu yang effort-nya bertambah X hari meneruskan `propagation_factor x X` hari; pendahulu yang mulai terlambat meneruskan seluruh keterlambatannya. Pendahulu yang dibatalkan tidak menahan. | |
@@ -64,6 +65,16 @@ Asumsi berikut berlaku untuk baseline maupun skenario, sehingga selisih keduanya
 | Task Blocker | Task ditahan `blocking_days` hari kerja (dibulatkan ke atas) sejak hari task itu siap dikerjakan (dependency terpenuhi dan rencana mulainya tercapai), atau sejak mulai simulasi bila sudah berjalan. Pemiliknya mengerjakan task lain; `independent_task_ids` yang belum mulai dialihkan kepadanya (bila perannya cocok) dan boleh mulai lebih awal dari rencananya. |
 | Priority Change | Proyek on hold diaktifkan (status development, task on hold dibuka lagi). Proyek disisipkan pada `new_priority_rank` di antara proyek aktif lalu prioritas dinomori ulang 1..n; proyek on hold dan rilis tidak berubah. `estimated_days` (bila diisi) menjadi effort `affected_task_ids` (kosong = semua task terbuka proyek). Target rilis = `target_date`. |
 | Critical Bug | Item perbaikan bug untuk `resource_id` mulai tanggal mulai simulasi selama `fixing_days` hari kerja anggota itu, memakai bagian hari menurut `severity` (critical 100%). Item ini didahulukan dari task proyek. `affected_task_ids` ditandai sebagai task yang disentuh. |
+
+## Respons DSS (SCRUM-63)
+
+Skenario menggambarkan kejadiannya; respons adalah keputusan untuk menanggapinya. DSS per skenario menyimulasikan setiap respons kandidat dengan `run_engine(..., actions=[...])`. `sim_actions.apply_actions` menerapkannya pada salinan skenario setelah aturan situasinya, jadi baseline tidak berubah. Tanpa `actions` hasil simulasi sama dengan sebelumnya.
+
+| Respons | Perubahan pada salinan skenario |
+| --- | --- |
+| `ReassignTasks(task_ids, to_resource_id, from_date)` | Setiap task terbuka di `task_ids` mendapat `Transfer(from_date, to_resource_id)`. Pada hari kerja pertama sejak `from_date` (atau hari pertama simulasi bila lebih awal), penjadwal lebih dulu menjalankan pelepasan task hari itu, lalu memindahkan task dari pemilik lama atau dari pool ke pemilik baru. Task belum mulai masuk antrean pemilik baru; task yang sudah berjalan dilanjutkan dengan sisa effort-nya dan tanggal mulainya tetap. Task yang sudah selesai, dibatalkan, atau on hold dilewati dan dicatat di `notes`. Ketidakhadiran pemilik baru berlaku seperti biasa. |
+
+Respons ditolak (`ResponseActionError`, kandidat DSS gagal) sebelum mengubah apa pun bila anggota atau task tidak ada, pemilik baru tidak memegang peran task, pemilik baru sudah keluar tim pada `from_date`, atau dirotasi dari proyek task. Peran dianggap cocok bila sama dengan peran utama, atau dengan peran sekunder bila `cross_role_capable` (D-02). Aturan ini lebih ketat daripada pool penjadwal, yang menerima peran sekunder tanpa melihat penanda itu. Setiap respons yang diterapkan menambah satu kalimat di `notes` serta task, proyek, dan anggotanya di `targets`.
 
 ## Kalender kapasitas (SCRUM-25)
 
@@ -148,7 +159,7 @@ Semua berawalan `/api/v1/simulasi` dan memakai izin `baseline:read`, sama dengan
 
 ```powershell
 # Mesin simulasi, tanpa basis data
-.\.venv\Scripts\python.exe -m pytest tests/test_sim_calendar.py tests/test_sim_scheduler.py tests/test_sim_rules.py tests/test_sim_kpi.py tests/test_sim_replication.py tests/test_simulation_result.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_sim_calendar.py tests/test_sim_scheduler.py tests/test_sim_rules.py tests/test_sim_kpi.py tests/test_sim_replication.py tests/test_simulation_result.py tests/test_sim_actions.py -v
 # Endpoint terhadap PostgreSQL (lihat README untuk TEST_DATABASE_URL)
 .\.venv\Scripts\python.exe -m pytest tests/test_simulation_api.py -m db -v
 ```

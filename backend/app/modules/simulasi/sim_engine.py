@@ -1,7 +1,8 @@
 """Mesin simulasi what-if: baseline dan satu skenario, berdampingan (Gambar 4.1, UC-03).
 
 1. Muat baseline snapshot sebagai dunia simulasi (`sim_world`).
-2. Terapkan aturan situasi pada salinannya (`sim_rules`, SCRUM-24).
+2. Terapkan aturan situasi pada salinannya (`sim_rules`, SCRUM-24), lalu respons kandidat DSS
+   bila ada (`sim_actions`, SCRUM-63).
 3. Hitung kalender kapasitas keduanya (`sim_calendar`, SCRUM-25).
 4-5. Jadwalkan keduanya hari demi hari (`sim_scheduler`, SCRUM-26).
 6. Hitung KPI keduanya dengan KPI Calculator modul Evaluasi (`evaluasi.kpi_calculator`,
@@ -13,6 +14,7 @@ hasilnya.
 """
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -26,6 +28,7 @@ from app.modules.evaluasi.kpi_calculator import (
 from app.modules.evaluasi.kpi_definitions import EvaluationConfig
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import Params
+from app.modules.simulasi.sim_actions import ResponseAction, apply_actions
 from app.modules.simulasi.sim_calendar import CapacityCalendar
 from app.modules.simulasi.sim_kpi import ProjectOutcome, member_loads, project_outcomes
 from app.modules.simulasi.sim_replication import (
@@ -74,16 +77,20 @@ def run_engine(
     runs: int | None = None,
     seed: int = DEFAULT_SEED,
     config: EvaluationConfig | None = None,
+    actions: Sequence[ResponseAction] = (),
 ) -> EngineOutput:
     """Simulasikan baseline dan skenario; `runs` mengaktifkan replikasi Monte Carlo.
 
     `config` adalah parameter rumus KPI (FR-04.11); kosong berarti parameter bawaan.
+    `actions` adalah respons kandidat DSS (`sim_actions`), diterapkan pada salinan skenario
+    setelah aturan situasinya; `ResponseActionError` bila respons tidak dapat diterapkan.
     """
     began = time.perf_counter()
     config = config or EvaluationConfig()
     baseline_world = build_world(snapshot, start_date)
     reference = reference_of(snapshot, baseline_world)
     applied = apply_scenario(baseline_world, situation, params)
+    apply_actions(applied, actions)
     scenario_world = applied.world
 
     baseline_calendar = CapacityCalendar(baseline_world)

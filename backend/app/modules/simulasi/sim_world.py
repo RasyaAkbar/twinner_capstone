@@ -94,6 +94,14 @@ class Release:
     resource_id: str
 
 
+@dataclass(frozen=True)
+class Transfer:
+    """Mulai `on`, task yang belum selesai dipindahkan ke `resource_id` (respons DSS)."""
+
+    on: date
+    resource_id: str
+
+
 @dataclass
 class SimTask:
     task_id: str
@@ -119,6 +127,8 @@ class SimTask:
     # Hari kerja task tertahan setelah siap dikerjakan (Task Blocker).
     block_days: int = 0
     releases: list[Release] = field(default_factory=list)
+    # Pemindahan ke anggota lain dari respons DSS (`sim_actions.ReassignTasks`).
+    transfers: list[Transfer] = field(default_factory=list)
     # Ditambahkan atau dikeluarkan dari scope oleh Change Request.
     added: bool = False
     removed: bool = False
@@ -175,6 +185,8 @@ class SimResource:
     secondary_role_ids: tuple[str, ...]
     capacity_reference: float
     join_date: date
+    # D-02: boleh mengambil alih task peran sekundernya (respons DSS, `sim_actions`).
+    cross_role_capable: bool = False
     # Tidak lagi di tim mulai tanggal ini (Member Withdrawal).
     leave_date: date | None = None
     ramp: Ramp | None = None
@@ -274,9 +286,7 @@ class SimWorld:
         if task.status == TaskStatus.IN_QA:
             return min(MIN_REMAINING_DAYS, effort)
         if task.actual_start is not None and task.actual_start < self.start_date:
-            worked = count_working_days(
-                task.actual_start, self.start_date - ONE_DAY, self.holidays
-            )
+            worked = count_working_days(task.actual_start, self.start_date - ONE_DAY, self.holidays)
             return max(effort - worked, MIN_REMAINING_DAYS)
         return effort
 
@@ -348,6 +358,7 @@ def build_world(baseline: BaselineSnapshotData, start_date: date | None = None) 
             if r.primary_role_id in roles
             else DEFAULT_CAPACITY_REFERENCE,
             join_date=r.join_date,
+            cross_role_capable=r.cross_role_capable,
         )
         for r in baseline.resources
     }
