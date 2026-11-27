@@ -350,16 +350,26 @@ def _role_level(member: SimResource, role: str) -> tuple[float, str]:
 def _available_capacity(
     context: _Context, result: CandidateRun, member: str, reference: SideRun
 ) -> CriterionValue:
-    loads = {day.day: day for day in reference.loads.get(member, [])}
-    days = [loads[day] for day in context.period(result) if day in loads]
-    if not days:
+    period = context.period(result)
+    if not period:
         return NOT_APPLICABLE
-    free = [max(0.0, 1.0 - d.load) if d.load is not None else 0.0 for d in days]
+    loads = {day.day: day for day in reference.loads.get(member, [])}
+    free: list[float] = []
+    for day in period:
+        load = loads.get(day)
+        if load is not None:
+            free.append(max(0.0, 1.0 - load.load) if load.load is not None else 0.0)
+            continue
+        # Sesudah hari terakhir pembanding tidak ada task proyek di sisi acuan, jadi bebannya
+        # hanya beban non-proyek dan mentoring dari kalender kapasitas.
+        capacity = reference.calendar.day(member, day)
+        working = capacity.working
+        free.append(max(0.0, 1.0 - capacity.non_project - capacity.mentoring) if working else 0.0)
     facts = {
         "available_days": round(sum(free), 2),
         "working_days": len(free),
-        "start": days[0].day.isoformat(),
-        "end": days[-1].day.isoformat(),
+        "start": period[0].isoformat(),
+        "end": period[-1].isoformat(),
     }
     return CriterionValue(round(sum(free) / len(free), 6), facts)
 
