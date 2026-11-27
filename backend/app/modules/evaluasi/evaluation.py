@@ -2,23 +2,19 @@
 
 Tanpa basis data. `evaluate` menjalankan ulang mesin simulasi modul Simulasi (`run_engine`)
 dengan masukan yang sama dengan simulasi tersimpan (snapshot, situasi, parameter, tanggal
-mulai, jumlah replikasi, dan benih). Mesin itu deterministik untuk benih yang sama, jadi jadwal
-dan beban yang dievaluasi sama dengan yang dilihat pengguna di hasil simulasi. KPI evaluasi
-dihitung dari jadwal task dan beban harian anggota itu (`kpi_calculator`), lalu dibandingkan
-(`kpi_comparator`). Tanpa replikasi nilai utama adalah hasil deterministik; dengan replikasi
-nilai utama adalah median (`kpi_replication`).
+mulai, jumlah replikasi, dan benih) dan konfigurasi KPI yang diminta. Mesin itu deterministik
+untuk benih yang sama dan menghitung KPI-nya dengan `kpi_calculator` (juga di setiap replikasi,
+lewat `kpi_replication`), jadi KPI evaluasi dengan konfigurasi bawaan sama dengan KPI di hasil
+simulasi. KPI dibandingkan dengan `kpi_comparator` (`kpi_items`, dipakai juga oleh hasil
+simulasi). Tanpa replikasi nilai utama adalah hasil deterministik; dengan replikasi nilai utama
+adalah median.
 """
 
 import time
 from dataclasses import dataclass
 from datetime import date
 
-from app.modules.evaluasi.kpi_calculator import (
-    Reference,
-    SideKpis,
-    SimulationOutput,
-    calculate,
-)
+from app.modules.evaluasi.kpi_calculator import SideKpis
 from app.modules.evaluasi.kpi_comparator import compare
 from app.modules.evaluasi.kpi_definitions import (
     KPI_DEFINITIONS,
@@ -27,7 +23,7 @@ from app.modules.evaluasi.kpi_definitions import (
     KpiDefinition,
     KpiStatus,
 )
-from app.modules.evaluasi.kpi_replication import ReplicatedKpis, replicate
+from app.modules.evaluasi.kpi_replication import ReplicatedKpis
 from app.modules.evaluasi.schemas import (
     EarGroup,
     KpiDetails,
@@ -49,9 +45,9 @@ from app.modules.evaluasi.schemas import (
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import Params
 from app.modules.simulasi.sim_calendar import EPS
-from app.modules.simulasi.sim_engine import SideRun, run_engine
+from app.modules.simulasi.sim_engine import run_engine
 from app.modules.simulasi.sim_replication import DEFAULT_SEED
-from app.modules.simulasi.sim_replication import Range as RangeStats
+from app.modules.simulasi.sim_stats import Range as RangeStats
 from app.modules.simulasi.sim_world import SimWorld
 from app.modules.simulasi.snapshot_schemas import BaselineSnapshotData
 
@@ -68,13 +64,6 @@ class EvaluationOutput:
     duration_ms: int
 
 
-def reference_of(snapshot: BaselineSnapshotData, baseline_world: SimWorld) -> Reference:
-    return Reference(
-        estimates={t.task_id: t.estimated_days for t in baseline_world.tasks.values()},
-        qa_rejects={t.task_id: t.qa_reject_count for t in snapshot.tasks},
-    )
-
-
 def evaluate(
     snapshot: BaselineSnapshotData,
     situation: Situation | str,
@@ -86,33 +75,17 @@ def evaluate(
     seed: int = DEFAULT_SEED,
 ) -> EvaluationOutput:
     began = time.perf_counter()
-    out = run_engine(snapshot, situation, params, start_date=start_date)
-    reference = reference_of(snapshot, out.baseline.world)
-
-    def side(run: SideRun) -> SideKpis:
-        output = SimulationOutput(run.world, run.schedule, run.loads, run.calendar, out.end_date)
-        return calculate(output, reference, config)
-
-    replication = None
-    if runs:
-        replication = replicate(
-            {
-                "baseline": (out.baseline.world, out.baseline.calendar),
-                "scenario": (out.scenario.world, out.scenario.calendar),
-            },
-            reference,
-            config,
-            runs,
-            seed,
-        )
+    out = run_engine(
+        snapshot, situation, params, start_date=start_date, runs=runs, seed=seed, config=config
+    )
     return EvaluationOutput(
         start_date=out.start_date,
         end_date=out.end_date,
         baseline_world=out.baseline.world,
         scenario_world=out.scenario.world,
-        baseline=side(out.baseline),
-        scenario=side(out.scenario),
-        replication=replication,
+        baseline=out.baseline.kpis,
+        scenario=out.scenario.kpis,
+        replication=out.replication.kpis if out.replication is not None else None,
         duration_ms=round((time.perf_counter() - began) * 1000),
     )
 
@@ -130,7 +103,7 @@ def build_evaluation(
     scenario_id: int | None = None,
 ) -> KpiEvaluation:
     config = config.resolved()
-    kpis = [kpi_item(definition, out, config) for definition in KPI_DEFINITIONS]
+    kpis = kpi_items(out.baseline, out.scenario, out.replication, config)
     return KpiEvaluation(
         evaluation_id=None,
         run_id=run_id,
@@ -158,20 +131,37 @@ def build_evaluation(
     )
 
 
+def kpi_items(
+    baseline: SideKpis,
+    scenario: SideKpis,
+    replication: ReplicatedKpis | None,
+    config: EvaluationConfig,
+) -> list[KpiEvaluationItem]:
+    """Semua KPI (urutan `KPI_DEFINITIONS`) beserta selisih dan statusnya."""
+    return [
+        kpi_item(definition, baseline, scenario, replication, config)
+        for definition in KPI_DEFINITIONS
+    ]
+
+
 def kpi_item(
-    definition: KpiDefinition, out: EvaluationOutput, config: EvaluationConfig
+    definition: KpiDefinition,
+    baseline: SideKpis,
+    scenario: SideKpis,
+    replication: ReplicatedKpis | None,
+    config: EvaluationConfig,
 ) -> KpiEvaluationItem:
     key = definition.key
     tolerance = config.tolerance(key)
-    b = out.baseline.values[key]
-    s = out.scenario.values[key]
+    b = baseline.values[key]
+    s = scenario.values[key]
     delta, status = compare(definition, b, s, tolerance)
     deterministic = KpiPoint(baseline=b, scenario=s, delta=delta, status=status)
 
     basis = "deterministic"
     primary = deterministic
     stats = None
-    rep = out.replication
+    rep = replication
     if rep is not None:
         basis = "median"
         if key == ON_TIME_PROBABILITY:

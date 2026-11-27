@@ -4,8 +4,9 @@
 2. Terapkan aturan situasi pada salinannya (`sim_rules`, SCRUM-24).
 3. Hitung kalender kapasitas keduanya (`sim_calendar`, SCRUM-25).
 4-5. Jadwalkan keduanya hari demi hari (`sim_scheduler`, SCRUM-26).
-6. Ubah hasilnya menjadi KPI (`sim_kpi`), dan bila diminta ulangi dengan effort teracak
-   (`sim_replication`, SCRUM-27).
+6. Hitung KPI keduanya dengan KPI Calculator modul Evaluasi (`evaluasi.kpi_calculator`,
+   FR-04.1 s.d. FR-04.10), dan bila diminta ulangi dengan effort teracak (`sim_replication`,
+   SCRUM-27). KPI hasil simulasi dan hasil evaluasi karena itu selalu sama.
 
 Modul ini tidak menyentuh basis data; `simulation_service` yang memuat snapshot dan menyimpan
 hasilnya.
@@ -15,16 +16,18 @@ import time
 from dataclasses import dataclass
 from datetime import date
 
+from app.modules.evaluasi.kpi_calculator import (
+    Reference,
+    SideKpis,
+    SimulationOutput,
+    calculate,
+    reference_of,
+)
+from app.modules.evaluasi.kpi_definitions import EvaluationConfig
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import Params
 from app.modules.simulasi.sim_calendar import CapacityCalendar
-from app.modules.simulasi.sim_kpi import (
-    KpiValue,
-    ProjectOutcome,
-    calculate_kpis,
-    member_loads,
-    project_outcomes,
-)
+from app.modules.simulasi.sim_kpi import ProjectOutcome, member_loads, project_outcomes
 from app.modules.simulasi.sim_replication import (
     DEFAULT_SEED,
     ReplicationSummary,
@@ -45,7 +48,7 @@ class SideRun:
     schedule: ScheduleResult
     loads: dict[str, list[MemberDay]]
     projects: dict[str, ProjectOutcome]
-    kpis: dict[str, KpiValue]
+    kpis: SideKpis
 
 
 @dataclass
@@ -56,6 +59,7 @@ class EngineOutput:
     baseline: SideRun
     scenario: SideRun
     targets: Targets
+    config: EvaluationConfig
     notes: list[str]
     replication: ReplicationSummary | None
     duration_ms: int
@@ -69,10 +73,16 @@ def run_engine(
     start_date: date | None = None,
     runs: int | None = None,
     seed: int = DEFAULT_SEED,
+    config: EvaluationConfig | None = None,
 ) -> EngineOutput:
-    """Simulasikan baseline dan skenario; `runs` mengaktifkan replikasi Monte Carlo."""
+    """Simulasikan baseline dan skenario; `runs` mengaktifkan replikasi Monte Carlo.
+
+    `config` adalah parameter rumus KPI (FR-04.11); kosong berarti parameter bawaan.
+    """
     began = time.perf_counter()
+    config = config or EvaluationConfig()
     baseline_world = build_world(snapshot, start_date)
+    reference = reference_of(snapshot, baseline_world)
     applied = apply_scenario(baseline_world, situation, params)
     scenario_world = applied.world
 
@@ -83,7 +93,7 @@ def run_engine(
     until = max(baseline_schedule.end_date, scenario_schedule.end_date)
 
     sides = [
-        _side(world, calendar, schedule, until)
+        _side(world, calendar, schedule, until, reference, config)
         for world, calendar, schedule in (
             (baseline_world, baseline_calendar, baseline_schedule),
             (scenario_world, scenario_calendar, scenario_schedule),
@@ -98,6 +108,8 @@ def run_engine(
             seed=seed,
             baseline_calendar=baseline_calendar,
             scenario_calendar=scenario_calendar,
+            reference=reference,
+            config=config,
         )
     return EngineOutput(
         start_date=baseline_world.start_date,
@@ -105,6 +117,7 @@ def run_engine(
         baseline=sides[0],
         scenario=sides[1],
         targets=applied.targets,
+        config=config,
         notes=baseline_world.notes + applied.notes,
         replication=replication,
         duration_ms=round((time.perf_counter() - began) * 1000),
@@ -112,15 +125,20 @@ def run_engine(
 
 
 def _side(
-    world: SimWorld, calendar: CapacityCalendar, schedule: ScheduleResult, until: date
+    world: SimWorld,
+    calendar: CapacityCalendar,
+    schedule: ScheduleResult,
+    until: date,
+    reference: Reference,
+    config: EvaluationConfig,
 ) -> SideRun:
     loads = member_loads(world, schedule, calendar, until)
-    projects = project_outcomes(world, schedule)
+    output = SimulationOutput(world, schedule, loads, calendar, until)
     return SideRun(
         world=world,
         calendar=calendar,
         schedule=schedule,
         loads=loads,
-        projects=projects,
-        kpis=calculate_kpis(world, schedule, loads, projects),
+        projects=project_outcomes(world, schedule),
+        kpis=calculate(output, reference, config),
     )

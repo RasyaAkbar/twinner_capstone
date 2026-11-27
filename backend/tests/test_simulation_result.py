@@ -6,15 +6,20 @@ Baseline uji, skenario Task Overrun TSK-0001 3 -> 5 hari:
         TSK-0001 BE 3 hari (RES-001)          05-07        05-09
         TSK-0002 BE 2 hari, hard, rencana 08  08-09        12-13
     PRJ-002: TSK-0101 BE 2 hari (RES-002)     05-06        05-06
+
+KPI mengikuti modul Evaluasi (kapasitas referensi fixture 1.0, threshold 1.0):
+    RLI RES-001 minggu 05: baseline 2 task = 2.0 (overload), skenario 1 task = 1.0.
+    SV portofolio: baseline 0 (PRJ-001 tepat 09), skenario +2 (selesai 13).
 """
 
 from datetime import datetime, timezone
 
+from app.modules.evaluasi.evaluation import build_evaluation, evaluate
+from app.modules.evaluasi.kpi_definitions import KPI_BY_KEY, KPI_KEYS, EvaluationConfig
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import TaskOverrunParams
 from app.modules.simulasi.scenario_schemas import ScenarioSummary
 from app.modules.simulasi.sim_engine import run_engine
-from app.modules.simulasi.sim_kpi import KPI_DEFINITIONS
 from app.modules.simulasi.simulation_result import build_result
 from app.modules.simulasi.simulation_schemas import RunMode, SimulationResult
 from tests.sim_fixtures import (
@@ -88,19 +93,57 @@ def test_result_header():
     assert any("Estimasi TSK-0001" in note for note in RESULT.notes)
 
 
+def test_kpis_follow_the_evaluasi_definitions():
+    kpis = by_key(RESULT.kpis, "key")
+    assert list(kpis) == list(KPI_KEYS)
+    for key, item in kpis.items():
+        definition = KPI_BY_KEY[key]
+        assert (item.fr, item.label, item.direction) == (
+            definition.fr,
+            definition.label,
+            definition.direction,
+        )
+        assert item.tolerance == definition.tolerance
+    assert RESULT.kpi_config == EvaluationConfig().resolved()
+
+
 def test_kpis_compare_scenario_with_baseline():
     kpis = by_key(RESULT.kpis, "key")
-    assert list(kpis) == [definition.key for definition in KPI_DEFINITIONS]
-    completion = kpis["completion_date"]
+    sv = kpis["schedule_variance"]
     # 09 -> 13: Senin 12 dan Selasa 13.
-    assert (completion.baseline, completion.scenario, completion.delta) == (d(9), d(13), 2.0)
-    assert completion.status == "worse"
-    assert (kpis["total_delay_days"].baseline, kpis["total_delay_days"].scenario) == (0.0, 2.0)
-    assert kpis["projects_missing_target"].status == "worse"
-    waiting = kpis["dependency_delayed_tasks"]
-    assert (waiting.baseline, waiting.scenario) == (0.0, 1.0)
-    assert kpis["peak_load"].status == "same"
-    assert kpis["unscheduled_tasks"].status == "same"
+    assert (sv.baseline, sv.scenario, sv.delta, sv.status) == (0.0, 2.0, 2.0, "worse")
+    on_time = kpis["on_time_probability"]
+    assert (on_time.baseline, on_time.scenario, on_time.status) == (1.0, 0.0, "worse")
+    rli = kpis["resource_load_index"]
+    assert (rli.baseline, rli.scenario, rli.status) == (2.0, 1.0, "better")
+    assert (kpis["overload_flags"].baseline, kpis["overload_flags"].scenario) == (1.0, 0.0)
+    # TSK-0001 terlambat 2 hari dan diteruskan penuh (hard) ke TSK-0002.
+    assert (kpis["cascade_delay_impact"].scenario, kpis["cascade_delay_impact"].status) == (
+        2.0,
+        "worse",
+    )
+    # (5 + 2 + 2) hari aktual / (3 + 2 + 2) hari estimasi baseline.
+    assert kpis["estimate_accuracy_ratio"].scenario == round(9 / 7, 6)
+    assert (RESULT.kpi_summary.better, RESULT.kpi_summary.worse) == (2, 5)
+
+
+def test_kpis_are_identical_to_the_evaluasi_module():
+    """Hasil simulasi dan evaluasi KPI dengan konfigurasi bawaan selalu sama."""
+    for runs in (None, 20):
+        simulated = result(runs=runs)
+        out = evaluate(
+            SNAPSHOT,
+            Situation.TASK_OVERRUN,
+            PARAMS,
+            EvaluationConfig(),
+            start_date=START,
+            runs=runs,
+            seed=3,
+        )
+        evaluated = build_evaluation(
+            out, EvaluationConfig(), situation="task_overrun", snapshot_id=1
+        )
+        assert [k.model_dump() for k in simulated.kpis] == [k.model_dump() for k in evaluated.kpis]
 
 
 def test_affected_tasks_and_their_shift():
@@ -127,6 +170,8 @@ def test_affected_projects_with_completion_shift():
     assert (late.affected, late.completion_shift, late.affected_task_count) == (True, 2, 2)
     assert (late.baseline.on_target, late.scenario.on_target) == (True, False)
     assert (late.baseline.delay_days, late.scenario.delay_days) == (0, 2)
+    assert (late.baseline.schedule_variance, late.scenario.schedule_variance) == (0, 2)
+    assert projects["PRJ-002"].scenario.schedule_variance < 0
     assert projects["PRJ-002"].affected is False
 
 
@@ -144,7 +189,14 @@ def test_member_load_per_day_and_per_week():
         (d(12), d(18)),
     ]
     assert (busy.periods[1].baseline_load, busy.periods[1].scenario_load) == (0.0, 1.0)
-    assert busy.scenario_overloaded_days == 0
+    assert busy.scenario_over_capacity_days == 0
+    # Overload mengikuti RLI mingguan KPI evaluasi, bukan beban harian.
+    first, second = busy.periods
+    assert (first.baseline_rli, first.scenario_rli) == (2.0, 1.0)
+    assert (first.baseline_overloaded, first.overloaded) == (True, False)
+    assert (second.baseline_rli, second.scenario_rli) == (0.0, 1.0)
+    assert (busy.baseline_peak_rli, busy.scenario_peak_rli) == (2.0, 1.0)
+    assert (busy.baseline_overloaded_weeks, busy.scenario_overloaded_weeks) == (1, 0)
     assert members["RES-002"].affected is False
 
 
@@ -167,13 +219,17 @@ def test_replication_adds_median_and_range_to_every_value():
     replicated = result(runs=20)
     assert replicated.replication.runs == 20
     for kpi in replicated.kpis:
-        assert kpi.replication is not None
-        assert kpi.replication.baseline.runs == 20
+        assert kpi.basis == "median"
+        assert kpi.replication is not None and kpi.replication.runs == 20
+        if kpi.key != "on_time_probability":
+            assert kpi.replication.baseline.runs + kpi.replication.baseline.missing == 20
     task = by_key(replicated.tasks, "task_id")["TSK-0002"]
     finish = task.replication.scenario_finish
     assert finish.min <= finish.median <= finish.max
     project = by_key(replicated.projects, "project_id")["PRJ-001"]
     assert project.replication.scenario_completion.runs == 20
+    assert project.replication.scenario_sv.runs == 20
+    assert 0.0 <= project.replication.scenario_on_time_probability <= 1.0
     member = by_key(replicated.members, "resource_id")["RES-001"]
     assert member.periods[0].replication.scenario.runs == 20
     # Masih dapat disimpan sebagai JSON.

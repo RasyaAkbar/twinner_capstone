@@ -13,11 +13,15 @@ Alur UC-03 (Gambar 4.1):
 
 UC-04: `get_result` membuka hasil tersimpan terakhir. Skenario yang belum pernah disimulasikan
 (dan disimpan) menghasilkan `NotSimulatedError` yang meminta pengguna menjalankan simulasi dulu.
+Hasil yang disimpan sebelum KPI mengikuti modul Evaluasi (daftar KPI sementara SCRUM-28) disusun
+ulang sekali dari masukan tersimpannya (snapshot, parameter, tanggal mulai, replikasi, benih),
+lalu disimpan kembali.
 """
 
 import json
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -197,7 +201,10 @@ def get_result(db: Session, scenario_id: int) -> SimulationResult:
     run = _latest(db, scenario_id)
     if run is None:
         raise NotSimulatedError(scenario_id)
-    result = SimulationResult.model_validate(run.result)
+    try:
+        result = SimulationResult.model_validate(run.result)
+    except ValidationError:
+        result = _rebuild(db, run, scenario)
     # Nama dan status skenario bisa berubah setelah hasil disimpan.
     result.scenario = ScenarioSummary.model_validate(scenario)
     result.is_stale = _is_stale(run, scenario)
@@ -230,6 +237,45 @@ def member_drilldown(db: Session, scenario_id: int, resource_id: str) -> MemberD
     return MemberDrilldown(
         run_id=result.run_id, is_stale=result.is_stale, member=member, tasks=owned
     )
+
+
+def _rebuild(db: Session, run: SimulationRun, scenario: Scenario) -> SimulationResult:
+    """Susun ulang hasil tersimpan berformat lama dengan KPI evaluasi, lalu simpan kembali.
+
+    Mesin simulasi deterministik untuk masukan dan benih yang sama, jadi jadwal dan beban
+    hasil susunan ulang sama dengan yang tersimpan; hanya KPI-nya yang mengikuti rumus baru.
+    """
+    snapshot = snapshot_service.load_snapshot(db, run.snapshot_id)
+    outcome = validate_parameters(run.situation, run.parameters, BaselineIndex.build(snapshot))
+    if outcome.params is None:
+        problems = "; ".join(error.message for error in outcome.errors)
+        raise ScenarioValidationError(
+            [(("parameters",), f"Hasil tersimpan tidak dapat disusun ulang: {problems}", "stale")]
+        )
+    out = run_engine(
+        snapshot,
+        run.situation,
+        outcome.params,
+        start_date=run.start_date,
+        runs=run.replications,
+        seed=run.seed or 0,
+    )
+    result = build_result(
+        out,
+        scenario=ScenarioSummary.model_validate(scenario),
+        parameters=run.parameters,
+        mode=RunMode.RUN_AND_SAVE,
+        snapshot_id=run.snapshot_id,
+        data_source=scenario.data_source,
+    )
+    result.run_id = run.run_id
+    result.saved = True
+    result.created_at = run.created_at
+    result.created_by = run.created_by
+    run.kpis = [kpi.model_dump(mode="json") for kpi in result.kpis]
+    run.result = result.model_dump(mode="json")
+    db.commit()
+    return result
 
 
 # --- bantuan -----------------------------------------------------------------------------------

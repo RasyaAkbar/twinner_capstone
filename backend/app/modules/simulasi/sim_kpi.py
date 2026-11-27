@@ -1,18 +1,20 @@
-"""KPI hasil simulasi dan perbandingannya dengan baseline (UC-03, SCRUM-28).
+"""Keluaran simulasi yang dipakai bersama hasil simulasi dan KPI evaluasi (UC-03, SCRUM-28).
 
-Daftar KPI di sini mengikuti kandidat SCRUM-31 (§I.4.2) dan masih sementara sampai disepakati
-dengan PuTI. KPI Calculator and Comparator lengkap (SCRUM-32) dibangun di atas modul ini.
+KPI tidak didefinisikan di sini. Semua KPI (FR-04.1 s.d. FR-04.10) didefinisikan dan dihitung
+oleh modul Evaluasi (`evaluasi.kpi_definitions`, `evaluasi.kpi_calculator`); modul ini hanya
+menyediakan bahan yang dipakai kalkulator itu dan layar hasil simulasi:
 
-Semua KPI bernilai "lebih kecil lebih baik": tanggal selesai lebih awal, keterlambatan lebih
-sedikit, beban lebih ringan, dan task bermasalah lebih sedikit. Status KPI skenario terhadap
-baseline: `better` bila selisihnya negatif, `worse` bila positif, `same` bila nol.
+- `member_loads`: beban harian setiap anggota pada rentang yang sama untuk kedua sisi.
+- `project_outcomes`: proyeksi selesai setiap proyek aktif (dasar Schedule Variance).
+- `weekly_loads`: utilisasi kapasitas harian per minggu. Ini bukan Resource Load Index; beban
+  harian di atas 100% kapasitas (`CAPACITY_LIMIT`) berarti kapasitas terlampaui, sedangkan
+  Overload Flag (FR-04.4) memakai RLI mingguan terhadap threshold-nya.
 """
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from enum import StrEnum
 
-from app.modules.data.workdays import count_working_days, next_working_day
+from app.modules.data.workdays import count_working_days
 from app.modules.simulasi.sim_calendar import EPS, CapacityCalendar
 from app.modules.simulasi.sim_scheduler import (
     MemberDay,
@@ -23,98 +25,8 @@ from app.modules.simulasi.sim_scheduler import (
 from app.modules.simulasi.sim_world import SimWorld
 
 ONE_DAY = timedelta(days=1)
-# Beban harian di atas 100% kapasitas dianggap berlebih (ambang menunggu SCRUM-31).
-OVERLOAD_THRESHOLD = 1.0
-
-
-class KpiUnit(StrEnum):
-    DATE = "date"
-    WORKING_DAYS = "working_days"
-    COUNT = "count"
-    RATIO = "ratio"
-
-
-class KpiStatus(StrEnum):
-    BETTER = "better"
-    SAME = "same"
-    WORSE = "worse"
-
-
-@dataclass(frozen=True)
-class KpiDefinition:
-    key: str
-    label: str
-    unit: KpiUnit
-    definition: str
-    formula: str
-    better: str = "lower"
-
-
-KPI_DEFINITIONS: tuple[KpiDefinition, ...] = (
-    KpiDefinition(
-        "completion_date",
-        "Proyeksi tanggal selesai",
-        KpiUnit.DATE,
-        "Tanggal task terakhir proyek aktif selesai menurut simulasi.",
-        "max(finish) semua task proyek aktif; selisih dihitung dalam hari kerja",
-    ),
-    KpiDefinition(
-        "total_delay_days",
-        "Total keterlambatan",
-        KpiUnit.WORKING_DAYS,
-        "Jumlah hari kerja keterlambatan setiap proyek aktif terhadap target rilisnya.",
-        "sum(hari kerja dari target_launch_date sampai proyeksi selesai, 0 bila tepat waktu)",
-    ),
-    KpiDefinition(
-        "projects_missing_target",
-        "Proyek melewati target rilis",
-        KpiUnit.COUNT,
-        "Proyek aktif yang proyeksi selesainya melewati target rilis atau punya task yang "
-        "tidak terjadwal, sehingga target peluncurannya tidak lagi terpenuhi.",
-        "count(proyek dengan selesai > target_launch_date atau task unscheduled > 0)",
-    ),
-    KpiDefinition(
-        "dependency_delayed_tasks",
-        "Task tertunda karena dependency",
-        KpiUnit.COUNT,
-        "Task yang dependency-nya baru terpenuhi setelah tanggal mulai rencananya, atau tidak "
-        "pernah terpenuhi.",
-        "count(task dengan dependency_ready > hari kerja pertama planned_start)",
-    ),
-    KpiDefinition(
-        "peak_load",
-        "Beban harian tertinggi",
-        KpiUnit.RATIO,
-        "Resource Load Index harian tertinggi di antara semua anggota (1.0 = 100% kapasitas).",
-        "max(bobot task dikerjakan / (capacity_reference x availability) + bagian non-proyek "
-        "+ bagian mentoring)",
-    ),
-    KpiDefinition(
-        "overloaded_member_days",
-        "Hari anggota kelebihan beban",
-        KpiUnit.COUNT,
-        "Jumlah pasangan anggota-hari kerja dengan beban di atas 100% kapasitas.",
-        f"count(beban harian > {OVERLOAD_THRESHOLD:g})",
-    ),
-    KpiDefinition(
-        "unscheduled_tasks",
-        "Task tidak terjadwal",
-        KpiUnit.COUNT,
-        "Task yang tidak dapat dikerjakan karena tidak ada anggota dengan perannya yang punya "
-        "kapasitas, atau menunggu task lain yang tidak terjadwal.",
-        "count(task berstatus unscheduled)",
-    ),
-    KpiDefinition(
-        "dropped_tasks",
-        "Task dikeluarkan dari scope",
-        KpiUnit.COUNT,
-        "Task yang dikeluarkan dari scope oleh skenario.",
-        "count(task yang dikeluarkan Change Request)",
-    ),
-)
-KPI_BY_KEY = {definition.key: definition for definition in KPI_DEFINITIONS}
-
-KpiValue = date | float | None
+# Beban harian di atas 100% kapasitas berarti kapasitas harian terlampaui.
+CAPACITY_LIMIT = 1.0
 
 
 @dataclass
@@ -179,13 +91,13 @@ def member_loads(
 
 @dataclass
 class WeekLoad:
-    """Beban satu anggota dalam satu minggu (Senin sampai Minggu)."""
+    """Utilisasi kapasitas harian satu anggota dalam satu minggu (Senin sampai Minggu)."""
 
     start: date
     # Rata-rata beban harian pada hari kerja anggota itu; None bila tidak bekerja seminggu penuh.
     average: float | None
     peak: float | None
-    overloaded_days: int
+    over_capacity_days: int
     working_days: int
 
 
@@ -205,7 +117,7 @@ def weekly_loads(days: list[MemberDay]) -> dict[date, WeekLoad]:
             start=start,
             average=round(sum(present) / len(present), 4) if present else None,
             peak=round(max(present), 4) if present else None,
-            overloaded_days=sum(1 for v in present if v > OVERLOAD_THRESHOLD + EPS),
+            over_capacity_days=sum(1 for v in present if v > CAPACITY_LIMIT + EPS),
             working_days=len(present),
         )
     return weeks
@@ -247,77 +159,3 @@ def project_outcomes(world: SimWorld, result: ScheduleResult) -> dict[str, Proje
             unscheduled=unscheduled,
         )
     return projects
-
-
-def dependency_delayed(world: SimWorld, result: ScheduleResult) -> list[str]:
-    """Task yang dependency-nya terpenuhi setelah hari kerja pertama rencana mulainya."""
-    with_preds = {d.task_id for d in world.dependencies}
-    delayed: list[str] = []
-    for task_id in sorted(with_preds):
-        task = world.tasks.get(task_id)
-        outcome = result.tasks.get(task_id)
-        if task is None or outcome is None or task.started or not world.schedulable(task):
-            continue
-        reference = next_working_day(max(world.earliest(task), world.start_date), world.holidays)
-        if outcome.dependency_ready is None:
-            if outcome.state == TaskState.UNSCHEDULED:
-                delayed.append(task_id)
-        elif outcome.dependency_ready > reference:
-            delayed.append(task_id)
-    return delayed
-
-
-def calculate_kpis(
-    world: SimWorld,
-    result: ScheduleResult,
-    loads: dict[str, list[MemberDay]],
-    projects: dict[str, ProjectOutcome] | None = None,
-) -> dict[str, KpiValue]:
-    """Nilai setiap KPI untuk satu hasil simulasi."""
-    projects = projects if projects is not None else project_outcomes(world, result)
-    completions = [p.completion for p in projects.values() if p.completion is not None]
-    daily = [d.load for days in loads.values() for d in days if d.load is not None]
-    return {
-        "completion_date": max(completions) if completions else None,
-        "total_delay_days": float(sum(p.delay_days or 0 for p in projects.values())),
-        "projects_missing_target": float(sum(1 for p in projects.values() if not p.on_target)),
-        "dependency_delayed_tasks": float(len(dependency_delayed(world, result))),
-        "peak_load": round(max(daily), 4) if daily else 0.0,
-        "overloaded_member_days": float(
-            sum(1 for load in daily if load > OVERLOAD_THRESHOLD + EPS)
-        ),
-        "unscheduled_tasks": float(
-            sum(1 for o in result.tasks.values() if o.state == TaskState.UNSCHEDULED)
-        ),
-        "dropped_tasks": float(sum(1 for t in world.tasks.values() if t.removed)),
-    }
-
-
-def compare_values(
-    definition: KpiDefinition,
-    baseline: KpiValue,
-    scenario: KpiValue,
-    holidays: frozenset[date],
-) -> tuple[float | None, KpiStatus]:
-    """Selisih skenario - baseline dan statusnya. Selisih tanggal dalam hari kerja.
-
-    Tanggal kosong berarti tidak ada proyeksi selesai; skenario tanpa proyeksi sementara
-    baseline punya dianggap lebih buruk.
-    """
-    if definition.unit == KpiUnit.DATE:
-        if baseline is None or scenario is None:
-            if baseline is None and scenario is None:
-                return None, KpiStatus.SAME
-            return None, KpiStatus.WORSE if scenario is None else KpiStatus.BETTER
-        delta = float(signed_working_days(baseline, scenario, holidays))
-    else:
-        delta = round(float(scenario or 0.0) - float(baseline or 0.0), 6)
-    return delta, status_of(delta)
-
-
-def status_of(delta: float) -> KpiStatus:
-    if delta < -EPS:
-        return KpiStatus.BETTER
-    if delta > EPS:
-        return KpiStatus.WORSE
-    return KpiStatus.SAME

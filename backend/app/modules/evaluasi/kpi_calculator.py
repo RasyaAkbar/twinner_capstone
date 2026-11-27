@@ -56,6 +56,7 @@ from app.modules.simulasi.sim_calendar import EPS, CapacityCalendar
 from app.modules.simulasi.sim_kpi import project_outcomes, signed_working_days, week_start
 from app.modules.simulasi.sim_scheduler import MemberDay, ScheduleResult, TaskState
 from app.modules.simulasi.sim_world import NonProjectItem, SimWorld
+from app.modules.simulasi.snapshot_schemas import BaselineSnapshotData
 
 ONE_DAY = timedelta(days=1)
 ONE_WEEK = timedelta(days=7)
@@ -85,6 +86,13 @@ class Reference:
     estimates: dict[str, float] = field(default_factory=dict)
     # D-05 qa_reject_count per task.
     qa_rejects: dict[str, int] = field(default_factory=dict)
+
+
+def reference_of(snapshot: BaselineSnapshotData, baseline_world: SimWorld) -> Reference:
+    return Reference(
+        estimates={t.task_id: t.estimated_days for t in baseline_world.tasks.values()},
+        qa_rejects={t.task_id: t.qa_reject_count for t in snapshot.tasks},
+    )
 
 
 @dataclass(frozen=True)

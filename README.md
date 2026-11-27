@@ -32,7 +32,7 @@ backend/
   tests/
 docs/
   BRANCH_WORKFLOW.md
-compose.yaml               # PostgreSQL untuk development lokal
+compose.yaml               # Seluruh aplikasi untuk development lokal (atau hanya db)
 ```
 
 ## Menjalankan lokal (PowerShell)
@@ -176,7 +176,17 @@ $env:TEST_DATABASE_URL = "postgresql+psycopg://puti:puti_local@localhost:5432/di
 
 ## Build frontend
 
-`npm run build` menghasilkan `frontend/dist`. Hosting frontend perlu fallback ke `index.html` untuk deep link React Router. Proxy Vite hanya untuk development; saat deployment arahkan `/api` ke FastAPI melalui reverse proxy, atau set `VITE_API_BASE_URL` saat build dan sesuaikan `CORS_ORIGINS`. Compose saat ini hanya untuk database lokal.
+`npm run build` menghasilkan `frontend/dist`. Hosting frontend perlu fallback ke `index.html` untuk deep link React Router. Proxy Vite hanya untuk development; saat deployment arahkan `/api` ke FastAPI melalui reverse proxy, atau set `VITE_API_BASE_URL` saat build dan sesuaikan `CORS_ORIGINS`.
+
+### Seluruh aplikasi dengan Docker (lokal)
+
+```powershell
+docker compose up -d --build   # db, migrasi, API, frontend; buka http://localhost:8080
+docker compose exec api python -m app.modules.auth.create_user --username admin --full-name "Admin"
+docker compose down            # berhenti; data tetap di volume postgres_data
+```
+
+Swagger di http://localhost:8000/docs. Port bisa diganti lewat `.env` (`WEB_PORT`, `API_PORT`, `POSTGRES_PORT`), misalnya bila PostgreSQL lain sudah memakai 5432.
 
 ### Image produksi (Docker)
 

@@ -10,27 +10,30 @@ apa adanya (JSONB) untuk "run and save".
 - Proyek "affected": disentuh langsung, punya task affected, atau proyeksi selesai, target,
   prioritas, maupun statusnya berubah.
 - Anggota "affected": disentuh langsung, atau beban maupun task hariannya berubah.
+
+KPI dihitung dan dibandingkan dengan rumus modul Evaluasi (FR-04.1 s.d. FR-04.10, `kpi_items`):
+Schedule Variance proyek, Resource Load Index mingguan, Overload Flag, dan SOI anggota di layar
+ini memakai nilai yang sama dengan KPI itu.
 """
 
 from datetime import date, timedelta
 from typing import Any
 
+from app.modules.evaluasi.evaluation import kpi_items
+from app.modules.evaluasi.kpi_definitions import KpiStatus
+from app.modules.evaluasi.schemas import StatusCount
 from app.modules.simulasi.scenario_schemas import ScenarioSummary
 from app.modules.simulasi.sim_calendar import EPS
 from app.modules.simulasi.sim_engine import EngineOutput, SideRun
 from app.modules.simulasi.sim_kpi import (
-    KPI_DEFINITIONS,
-    OVERLOAD_THRESHOLD,
+    CAPACITY_LIMIT,
     ProjectOutcome,
-    compare_values,
     signed_working_days,
     weekly_loads,
 )
-from app.modules.simulasi.sim_replication import Range as RangeStats
 from app.modules.simulasi.sim_scheduler import MemberDay, TaskOutcome
+from app.modules.simulasi.sim_stats import Range as RangeStats
 from app.modules.simulasi.simulation_schemas import (
-    KpiReplication,
-    KpiResult,
     MemberDayLoad,
     MemberPeriod,
     MemberResult,
@@ -67,6 +70,12 @@ def build_result(
     affected_tasks = {t.task_id for t in tasks if t.affected}
     projects = _projects(out, tasks, holidays)
     members = _members(out)
+    kpis = kpi_items(
+        out.baseline.kpis,
+        out.scenario.kpis,
+        out.replication.kpis if out.replication is not None else None,
+        out.config,
+    )
     warnings = [
         SimulationWarning(
             run=run, code=w.code, task_id=w.task_id, project_id=w.project_id, message=w.message
@@ -99,51 +108,21 @@ def build_result(
             unscheduled_tasks=sum(
                 1 for t in tasks if t.scenario is not None and t.scenario.state == "unscheduled"
             ),
-            overloaded_members=sum(1 for m in members if m.scenario_overloaded_days > 0),
+            overloaded_members=sum(1 for m in members if m.scenario_overloaded_weeks > 0),
         ),
-        kpis=_kpis(out, holidays),
+        kpi_config=out.config.resolved(),
+        kpi_summary=StatusCount(
+            better=sum(1 for k in kpis if k.status == KpiStatus.BETTER),
+            same=sum(1 for k in kpis if k.status == KpiStatus.SAME),
+            worse=sum(1 for k in kpis if k.status == KpiStatus.WORSE),
+        ),
+        kpis=kpis,
         projects=projects,
         tasks=tasks,
         members=members,
         warnings=warnings,
         notes=out.notes,
     )
-
-
-# --- KPI -------------------------------------------------------------------------------------
-
-
-def _kpis(out: EngineOutput, holidays: frozenset[date]) -> list[KpiResult]:
-    results = []
-    for definition in KPI_DEFINITIONS:
-        baseline = out.baseline.kpis[definition.key]
-        scenario = out.scenario.kpis[definition.key]
-        delta, status = compare_values(definition, baseline, scenario, holidays)
-        replication = None
-        if out.replication is not None:
-            stats = out.replication.kpis[definition.key]
-            replication = KpiReplication(
-                baseline=_range(stats.baseline),
-                scenario=_range(stats.scenario),
-                delta=_range(stats.delta),
-                status=stats.status,
-            )
-        results.append(
-            KpiResult(
-                key=definition.key,
-                label=definition.label,
-                unit=definition.unit,
-                better="lower",
-                definition=definition.definition,
-                formula=definition.formula,
-                baseline=baseline,
-                scenario=scenario,
-                delta=delta,
-                status=status,
-                replication=replication,
-            )
-        )
-    return results
 
 
 # --- task --------------------------------------------------------------------------------------
@@ -262,8 +241,10 @@ def _projects(
             replication = ProjectReplication(
                 baseline_completion=_range(stats.baseline_completion),
                 scenario_completion=_range(stats.scenario_completion),
-                baseline_delay=_range(stats.baseline_delay),
-                scenario_delay=_range(stats.scenario_delay),
+                baseline_sv=_range(stats.baseline_sv),
+                scenario_sv=_range(stats.scenario_sv),
+                baseline_on_time_probability=stats.baseline_on_time_probability,
+                scenario_on_time_probability=stats.scenario_on_time_probability,
             )
         results.append(
             ProjectResult(
@@ -293,6 +274,7 @@ def _project_side(side: SideRun, project_id: str) -> ProjectSide | None:
             priority_rank=project.priority_rank,
             target_launch_date=project.target_launch_date,
             completion=None,
+            schedule_variance=None,
             delay_days=None,
             on_target=None,
             unscheduled_tasks=0,
@@ -302,6 +284,7 @@ def _project_side(side: SideRun, project_id: str) -> ProjectSide | None:
         priority_rank=outcome.priority_rank,
         target_launch_date=outcome.target,
         completion=outcome.completion,
+        schedule_variance=side.kpis.project_sv.get(project_id),
         delay_days=outcome.delay_days,
         on_target=outcome.on_target,
         unscheduled_tasks=outcome.unscheduled,
@@ -313,6 +296,11 @@ def _project_side(side: SideRun, project_id: str) -> ProjectSide | None:
 
 def _members(out: EngineOutput) -> list[MemberResult]:
     base, scen = out.baseline, out.scenario
+    threshold = out.config.overload_threshold
+
+    def overloaded(rli: float | None) -> bool:
+        return rli is not None and rli > threshold + EPS
+
     results: list[MemberResult] = []
     for resource_id in sorted(set(base.world.resources) | set(scen.world.resources)):
         resource = scen.world.resources.get(resource_id) or base.world.resources[resource_id]
@@ -322,26 +310,32 @@ def _members(out: EngineOutput) -> list[MemberResult]:
             _day_load(day, b_days.get(day), s_days.get(day))
             for day in sorted(b_days.keys() | s_days.keys())
         ]
+        # Utilisasi kapasitas harian per minggu, dan RLI mingguan KPI evaluasi (FR-04.3).
         b_weeks = weekly_loads(list(b_days.values()))
         s_weeks = weekly_loads(list(s_days.values()))
+        b_rli = {w: load.rli for w, load in base.kpis.member_weeks.get(resource_id, {}).items()}
+        s_rli = {w: load.rli for w, load in scen.kpis.member_weeks.get(resource_id, {}).items()}
         replication_weeks = (
             out.replication.members.get(resource_id, {}) if out.replication is not None else {}
         )
         periods = []
-        for start in sorted(b_weeks.keys() | s_weeks.keys()):
+        for start in sorted(b_weeks.keys() | s_weeks.keys() | b_rli.keys() | s_rli.keys()):
             bw, sw = b_weeks.get(start), s_weeks.get(start)
             stats = replication_weeks.get(start)
             periods.append(
                 MemberPeriod(
                     period_start=start,
                     period_end=start + WEEK,
+                    baseline_rli=b_rli.get(start),
+                    scenario_rli=s_rli.get(start),
+                    baseline_overloaded=overloaded(b_rli.get(start)),
+                    overloaded=overloaded(s_rli.get(start)),
                     baseline_load=bw.average if bw else None,
                     scenario_load=sw.average if sw else None,
                     baseline_peak=bw.peak if bw else None,
                     scenario_peak=sw.peak if sw else None,
-                    baseline_overloaded_days=bw.overloaded_days if bw else 0,
-                    scenario_overloaded_days=sw.overloaded_days if sw else 0,
-                    overloaded=bool(sw and sw.overloaded_days),
+                    baseline_over_capacity_days=bw.over_capacity_days if bw else 0,
+                    scenario_over_capacity_days=sw.over_capacity_days if sw else 0,
                     replication=PeriodReplication(
                         baseline=_range(stats.baseline),
                         scenario=_range(stats.scenario),
@@ -365,10 +359,16 @@ def _members(out: EngineOutput) -> list[MemberResult]:
                 added=resource.added,
                 targeted=resource_id in out.targets.resources,
                 affected=resource_id in out.targets.resources or changed,
+                baseline_peak_rli=max(b_rli.values(), default=None),
+                scenario_peak_rli=max(s_rli.values(), default=None),
+                baseline_overloaded_weeks=sum(1 for v in b_rli.values() if overloaded(v)),
+                scenario_overloaded_weeks=sum(1 for v in s_rli.values() if overloaded(v)),
+                baseline_soi=base.kpis.soi.get(resource_id, 0.0),
+                scenario_soi=scen.kpis.soi.get(resource_id, 0.0),
                 baseline_peak_load=_round(max(b_loads)) if b_loads else None,
                 scenario_peak_load=_round(max(s_loads)) if s_loads else None,
-                baseline_overloaded_days=_overloaded(b_loads),
-                scenario_overloaded_days=_overloaded(s_loads),
+                baseline_over_capacity_days=_over_capacity(b_loads),
+                scenario_over_capacity_days=_over_capacity(s_loads),
                 periods=periods,
                 days=days,
             )
@@ -384,8 +384,8 @@ def _day_load(day: date, b: MemberDay | None, s: MemberDay | None) -> MemberDayL
         scenario_capacity=_round(s.capacity) if s else 0.0,
         scenario_absence=s.absence if s else None,
         scenario_tasks=list(s.tasks) if s else [],
-        baseline_overloaded=bool(b and b.overloaded),
-        overloaded=bool(s and s.overloaded),
+        baseline_over_capacity=bool(b and b.overloaded),
+        over_capacity=bool(s and s.overloaded),
     )
 
 
@@ -399,8 +399,8 @@ def _differs(b: MemberDay | None, s: MemberDay | None) -> bool:
     return b.tasks != s.tasks
 
 
-def _overloaded(loads: list[float]) -> int:
-    return sum(1 for load in loads if load > OVERLOAD_THRESHOLD + EPS)
+def _over_capacity(loads: list[float]) -> int:
+    return sum(1 for load in loads if load > CAPACITY_LIMIT + EPS)
 
 
 def _round(value: float | None) -> float | None:
