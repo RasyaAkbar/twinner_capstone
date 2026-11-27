@@ -187,6 +187,8 @@ class SimResource:
     join_date: date
     # D-02: boleh mengambil alih task peran sekundernya (respons DSS, `sim_actions`).
     cross_role_capable: bool = False
+    # D-02 seniority (junior, mid, senior); dipakai penilaian mentor DSS.
+    seniority: str | None = None
     # Tidak lagi di tim mulai tanggal ini (Member Withdrawal).
     leave_date: date | None = None
     ramp: Ramp | None = None
@@ -359,6 +361,7 @@ def build_world(baseline: BaselineSnapshotData, start_date: date | None = None) 
             else DEFAULT_CAPACITY_REFERENCE,
             join_date=r.join_date,
             cross_role_capable=r.cross_role_capable,
+            seniority=r.seniority.value,
         )
         for r in baseline.resources
     }
