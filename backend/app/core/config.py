@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # rencana; di dataset dosbim 557 sekaligus. Mati sampai tim sepakat (review PR #39);
     # dry run tetap bisa dipakai.
     overrun_detection_enabled: bool = False
+    # DSS per skenario (SCRUM-61): batas kandidat yang disimulasikan per sweep, termasuk pilihan
+    # pengguna. Bawaannya sama dengan dss.sweep_candidates.MAX_CANDIDATES.
+    dss_max_candidates: int = Field(default=50, ge=1, le=500)
 
     @model_validator(mode="after")
     def check_jwt_secret(self) -> "Settings":
