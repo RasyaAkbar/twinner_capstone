@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # DSS per skenario (SCRUM-61): batas kandidat yang disimulasikan per sweep, termasuk pilihan
     # pengguna. Bawaannya sama dengan dss.sweep_candidates.MAX_CANDIDATES.
     dss_max_candidates: int = Field(default=50, ge=1, le=500)
+    # Job sweep DSS (SCRUM-69): sweep yang berjalan bersamaan per proses, dan berapa lama sweep
+    # pending/running tanpa kemajuan dianggap terhenti (proses mati) sehingga dapat diulang.
+    dss_max_concurrent_sweeps: int = Field(default=1, ge=1, le=8)
+    dss_sweep_stale_minutes: int = Field(default=30, ge=1)
+    # Bobot kriteria penilaian kandidat (SCRUM-66); bawaan sama rata sampai disepakati tim.
+    dss_weight_role_match: float = Field(default=0.25, ge=0)
+    dss_weight_available_capacity: float = Field(default=0.25, ge=0)
+    dss_weight_current_work: float = Field(default=0.25, ge=0)
+    dss_weight_kpi_effect: float = Field(default=0.25, ge=0)
 
     @model_validator(mode="after")
     def check_jwt_secret(self) -> "Settings":

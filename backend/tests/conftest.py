@@ -27,6 +27,7 @@ from app.modules.auth import security
 from app.modules.auth.models import AppUser
 from app.modules.auth.permissions import ROLES
 from app.modules.auth.rbac_models import UserAppRole
+from app.modules.dss.sweep_job import NoScheduler, get_sweep_scheduler
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL")
@@ -77,6 +78,9 @@ def client(session_factory):
 
     Request dikirim sebagai pengguna yang memegang semua peran aplikasi, supaya tes fitur
     tidak terganjal izin. Aturan izin per peran dites di test_data_permissions.py.
+
+    Sweep DSS yang dibuat Run and save tidak dijalankan (`NoScheduler`), supaya tidak ada job
+    latar belakang yang menulis ke basis data tes; tes DSS menggantinya dengan `InlineScheduler`.
     """
     with session_factory() as session:
         session.execute(text("TRUNCATE projects, resources, holidays, app_user CASCADE"))
@@ -88,6 +92,7 @@ def client(session_factory):
             yield session
 
     app.dependency_overrides[get_db] = override
+    app.dependency_overrides[get_sweep_scheduler] = NoScheduler
     with TestClient(app) as test_client:
         test_client.headers["Authorization"] = f"Bearer {token}"
         yield test_client
