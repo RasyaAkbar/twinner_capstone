@@ -1,4 +1,4 @@
-"""Lever setiap situasi keputusan untuk DSS per skenario (SCRUM-61, SCRUM-62).
+"""Lever setiap situasi keputusan untuk DSS per skenario (SCRUM-61, SCRUM-62, SCRUM-64).
 
 DSS per skenario mengulang situasi skenario yang sudah disimulasikan untuk setiap nilai yang
 mungkin dari satu keputusan, yaitu lever-nya, lalu memeringkat hasilnya (§IV.2.4, FR-07).
@@ -46,8 +46,31 @@ Rinciannya:
   sama, peran sekunder sama (bila cross-role capable), lalu lainnya, masing-masing menurut
   `resource_id`.
 
-Generator lever pengalihan dibuat di SCRUM-64. Sampai saat itu generatornya belum mengusulkan
-opsi, sehingga sweep situasi itu hanya berisi pilihan pengguna sendiri.
+Opsi lever pengalihan (SCRUM-64) dibaca dari dunia skenario pengguna (`LeverContext.scenario`,
+setelah aturan situasinya), jadi pemilik task, task yang dilepas, dan ID task tambahan sama
+dengan yang disimulasikan:
+
+| Situasi | Task yang dialihkan | Mulai | Dikecualikan dari calon |
+| --- | --- | --- | --- |
+| Member Absence | `affected_task_ids` (lihat catatan) | awal ketidakhadiran | anggota itu |
+| Member Rotation or Withdrawal | task yang dilepas anggota itu | `transfer_date` | anggota itu |
+| Task Overrun | `task_id` (sisa pekerjaannya) | mulai simulasi | pemilik task |
+| Task Blocker | task independen yang belum mulai | mulai simulasi | pemilik task terblokir |
+| Mid-sprint Change Request | task tambahan (`CR-001`, ...) | awal periode terdampak | - |
+
+- Tanpa `affected_task_ids`, Member Absence mengalihkan task terbuka anggota itu yang sudah
+  berjalan atau dapat dimulai sebelum ketidakhadirannya berakhir. Task yang baru dimulai jauh
+  sesudahnya tidak ikut, karena pengalihan berlaku sampai task selesai.
+- Task dikelompokkan menurut perannya. Setiap kelompok punya kandidat sendiri, satu per anggota
+  yang memegang peran itu (utama, atau sekunder bila cross-role capable), tanpa perkalian antar
+  kelompok, sehingga jumlah kandidat tetap linier. Kelompok terbesar lebih dulu; bila ada lebih
+  dari satu kelompok, labelnya menyebut perannya.
+- Calon sudah bergabung, belum keluar tim, dan masih mengerjakan proyek task-task itu pada
+  tanggal mulai pengalihan, sama dengan syarat `sim_actions.ReassignTasks`. Untuk Member
+  Absence, calon yang tidak hadir pada setiap hari kerja periode ketidakhadiran dikecualikan.
+- Bila tidak ada task yang dapat dialihkan (misalnya Task Blocker tanpa task independen yang
+  belum mulai), generator melempar `NoLeverError`; sweep hanya berisi pilihan pengguna beserta
+  alasannya.
 """
 
 import math
@@ -58,18 +81,23 @@ from enum import StrEnum
 from typing import Any
 
 from app.modules.data.enums import AbsenceType
-from app.modules.data.workdays import is_working_day
+from app.modules.data.workdays import is_working_day, working_days_between
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import (
     BaselineIndex,
+    ChangeRequestParams,
     CriticalBugParams,
+    MemberAbsenceParams,
+    MemberRotationParams,
     NewMemberParams,
     Params,
     PriorityChangeParams,
+    TaskBlockerParams,
+    TaskOverrunParams,
     max_priority_rank,
 )
-from app.modules.simulasi.sim_actions import ResponseAction
-from app.modules.simulasi.sim_world import onboarding_working_days
+from app.modules.simulasi.sim_actions import ReassignTasks, ResponseAction, holds_role
+from app.modules.simulasi.sim_world import SimTask, SimWorld, onboarding_working_days
 from app.modules.simulasi.snapshot_schemas import AvailabilityRow, ResourceRow
 
 ONE_DAY = timedelta(days=1)
@@ -111,6 +139,8 @@ class LeverContext:
     # Tanggal mulai simulasi yang disapu, sama dengan simulasi skenario pengguna.
     start_date: date
     holidays: frozenset[date]
+    # Dunia skenario pengguna setelah aturan situasinya; hanya dibaca generator.
+    scenario: SimWorld
 
     def working_days_from(self, start: date, count: int) -> list[date]:
         """`count` hari kerja pertama pada atau sesudah `start`."""
@@ -126,6 +156,10 @@ class LeverContext:
 # Menerima parameter skenario pengguna yang sudah lolos validasi. Opsi yang paling relevan
 # disebut lebih dulu: bila jumlah kandidat dibatasi, opsi di akhir daftar yang terpotong.
 OptionGenerator = Callable[[Any, LeverContext], Iterable[LeverOption]]
+
+
+class NoLeverError(Exception):
+    """Skenario ini tidak punya nilai lever lain untuk dicoba; pesannya adalah alasannya."""
 
 
 @dataclass(frozen=True)
@@ -209,6 +243,133 @@ def rank_options(p: PriorityChangeParams, context: LeverContext) -> Iterator[Lev
         yield LeverOption(rank)
 
 
+# --- lever pengalihan (SCRUM-64) ---------------------------------------------------------------
+
+
+def absence_options(p: MemberAbsenceParams, context: LeverContext) -> Iterator[LeverOption]:
+    """Pengganti untuk task anggota yang tidak hadir, mulai awal ketidakhadirannya."""
+    w = context.scenario
+    period = p.absence_period
+    if p.affected_task_ids:
+        tasks = [w.tasks[task_id] for task_id in p.affected_task_ids]
+    else:
+        tasks = [
+            t
+            for t in w.tasks.values()
+            if t.owner == p.resource_id and (t.started or w.earliest(t) <= period.end)
+        ]
+    tasks = _open(w, tasks)
+    if not tasks:
+        raise NoLeverError(f"Tidak ada task terbuka {p.resource_id} yang terdampak ketidakhadiran")
+    first = max(period.start, context.start_date)
+    days = working_days_between(first, period.end, context.holidays) if first <= period.end else []
+    yield from _reassignments(
+        context,
+        tasks,
+        period.start,
+        exclude={p.resource_id},
+        absence_days=days,
+        absence_label=f"periode ketidakhadiran {p.resource_id}",
+    )
+
+
+def rotation_options(p: MemberRotationParams, context: LeverContext) -> Iterator[LeverOption]:
+    """Pengganti untuk task yang dilepas anggota yang pindah atau keluar, mulai tanggal pindah."""
+    w = context.scenario
+    released = [
+        t
+        for t in w.tasks.values()
+        if any(r.on == p.transfer_date and r.resource_id == p.resource_id for r in t.releases)
+    ]
+    tasks = _open(w, released)
+    if not tasks:
+        raise NoLeverError(
+            f"Tidak ada task yang dilepas {p.resource_id} pada {p.transfer_date.isoformat()}"
+        )
+    yield from _reassignments(context, tasks, p.transfer_date, exclude={p.resource_id})
+
+
+def overrun_options(p: TaskOverrunParams, context: LeverContext) -> Iterator[LeverOption]:
+    """Pengganti untuk sisa pekerjaan task yang overrun, mulai tanggal mulai simulasi."""
+    w = context.scenario
+    task = w.tasks[p.task_id]
+    if not _open(w, [task]):
+        raise NoLeverError(f"{task.task_id} tidak dijadwalkan ({task.status})")
+    owner = {task.owner} if task.owner else set()
+    yield from _reassignments(context, [task], context.start_date, exclude=owner)
+
+
+def blocker_options(p: TaskBlockerParams, context: LeverContext) -> Iterator[LeverOption]:
+    """Anggota lain yang mengambil task independen selama blokir, mulai tanggal mulai simulasi."""
+    w = context.scenario
+    independent = _open(w, [w.tasks[task_id] for task_id in p.independent_task_ids])
+    tasks = [t for t in independent if not t.started]
+    if not tasks:
+        raise NoLeverError("Tidak ada task independen yang belum mulai untuk dialihkan")
+    owner = w.tasks[p.task_id].owner
+    yield from _reassignments(
+        context, tasks, context.start_date, exclude={owner} if owner else set()
+    )
+
+
+def change_request_options(p: ChangeRequestParams, context: LeverContext) -> Iterator[LeverOption]:
+    """Pemilik task tambahan change request, mulai awal periode terdampak."""
+    w = context.scenario
+    tasks = _open(w, [t for t in w.tasks.values() if t.added and t.project_id == p.project_id])
+    if not tasks:
+        raise NoLeverError("Change request ini tidak menambah task")
+    yield from _reassignments(context, tasks, p.affected_period.start, exclude=set())
+
+
+def _reassignments(
+    context: LeverContext,
+    tasks: list[SimTask],
+    on: date,
+    *,
+    exclude: Collection[str],
+    absence_days: list[date] | None = None,
+    absence_label: str = "",
+) -> Iterator[LeverOption]:
+    """Satu opsi per anggota yang dapat mengambil setiap kelompok peran `tasks` mulai `on`."""
+    w = context.scenario
+    groups: dict[str, list[SimTask]] = {}
+    for task in sorted(tasks, key=lambda t: t.task_id):
+        groups.setdefault(task.required_role_id, []).append(task)
+    for role, group in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+        task_ids = tuple(t.task_id for t in group)
+        projects = {t.project_id for t in group}
+        takers = sorted(
+            (
+                r
+                for r in w.resources.values()
+                if r.resource_id not in exclude
+                and holds_role(r, role)
+                and r.join_date <= on
+                and (r.leave_date is None or r.leave_date > on)
+                and all(r.works_on(project_id, on) for project_id in projects)
+            ),
+            key=lambda r: (r.primary_role_id != role, r.resource_id),
+        )
+        for resource in takers:
+            reason = None
+            rows = _absences(context, resource.resource_id)
+            if absence_days and (covering := _absent_throughout(rows, absence_days)):
+                period = _period(absence_days[0], absence_days[-1])
+                reason = f"Tidak hadir sepanjang {absence_label} {period}: {_listing(covering)}"
+            label = f"{resource.name} ({resource.resource_id}) untuk {role}"
+            yield LeverOption(
+                resource.resource_id,
+                actions=(ReassignTasks(task_ids, resource.resource_id, on),),
+                excluded_reason=reason,
+                label=label if len(groups) > 1 else None,
+            )
+
+
+def _open(w: SimWorld, tasks: Iterable[SimTask]) -> list[SimTask]:
+    """Task yang masih dijadwalkan (belum selesai, tidak dibatalkan atau on hold), tanpa ganda."""
+    return [t for t in {t.task_id: t for t in tasks}.values() if w.schedulable(t)]
+
+
 def _by_role(resources: Iterable[ResourceRow], role_ids: Collection[str]) -> list[ResourceRow]:
     """Peran utama cocok, lalu peran sekunder cocok (cross-role capable), lalu lainnya."""
 
@@ -255,11 +416,6 @@ def _period(start: date, end: date) -> str:
     return f"{start.isoformat()} s.d. {end.isoformat()}"
 
 
-def _pending(params: Params, context: LeverContext) -> Iterable[LeverOption]:
-    """Belum ada opsi: generator lever pengalihan dibuat di SCRUM-64."""
-    return ()
-
-
 LEVERS: dict[Situation, LeverSpec] = {
     spec.situation: spec
     for spec in (
@@ -268,14 +424,14 @@ LEVERS: dict[Situation, LeverSpec] = {
             "added_task_owner_id",
             "Pemilik task tambahan",
             LeverKind.REASSIGNMENT,
-            _pending,
+            change_request_options,
         ),
         LeverSpec(
             Situation.MEMBER_ABSENCE,
             "replacement_resource_id",
             "Pengganti",
             LeverKind.REASSIGNMENT,
-            _pending,
+            absence_options,
         ),
         LeverSpec(
             Situation.NEW_MEMBER,
@@ -290,21 +446,21 @@ LEVERS: dict[Situation, LeverSpec] = {
             "replacement_resource_id",
             "Pengganti",
             LeverKind.REASSIGNMENT,
-            _pending,
+            rotation_options,
         ),
         LeverSpec(
             Situation.TASK_OVERRUN,
             "replacement_resource_id",
             "Pengganti",
             LeverKind.REASSIGNMENT,
-            _pending,
+            overrun_options,
         ),
         LeverSpec(
             Situation.TASK_BLOCKER,
             "independent_task_owner_id",
             "Pengambil task independen",
             LeverKind.REASSIGNMENT,
-            _pending,
+            blocker_options,
         ),
         LeverSpec(
             Situation.PRIORITY_CHANGE,

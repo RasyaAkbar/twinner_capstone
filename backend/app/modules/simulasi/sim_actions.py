@@ -101,13 +101,17 @@ def _reassign(applied: AppliedScenario, action: ReassignTasks) -> None:
         )
 
 
+def holds_role(resource: SimResource, role_id: str) -> bool:
+    """Peran utama sama, atau peran sekunder sama bila anggota cross-role capable (D-02)."""
+    return resource.primary_role_id == role_id or (
+        resource.cross_role_capable and role_id in resource.secondary_role_ids
+    )
+
+
 def _check_owner(w: SimWorld, task: SimTask, resource: SimResource, on: date) -> None:
-    """Pemilik baru memegang peran task (utama, atau sekunder bila cross-role capable) dan masih
-    mengerjakan proyek task pada `on`."""
+    """Pemilik baru memegang peran task dan masih mengerjakan proyek task pada `on`."""
     role = task.required_role_id
-    if resource.primary_role_id != role and not (
-        resource.cross_role_capable and role in resource.secondary_role_ids
-    ):
+    if not holds_role(resource, role):
         raise ResponseActionError(
             f"{resource.resource_id} tidak memegang peran {role} untuk {task.task_id}"
         )
