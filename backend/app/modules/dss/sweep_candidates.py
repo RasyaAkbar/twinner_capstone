@@ -21,9 +21,17 @@ Modul ini tidak menyentuh basis data.
 import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
-from app.modules.dss.sweep_levers import LEVERS, LeverKind, LeverOption, LeverSpec, LeverValue
+from app.modules.dss.sweep_levers import (
+    LEVERS,
+    LeverContext,
+    LeverKind,
+    LeverOption,
+    LeverSpec,
+    LeverValue,
+)
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import (
     BaselineIndex,
@@ -31,6 +39,8 @@ from app.modules.simulasi.scenario_params import (
     validate_parameters,
 )
 from app.modules.simulasi.sim_actions import ResponseAction
+from app.modules.simulasi.sim_world import default_start_date
+from app.modules.simulasi.snapshot_schemas import BaselineSnapshotData
 
 # Bawaan batas kandidat yang disimulasikan per sweep, termasuk pilihan pengguna. Job sweep
 # meneruskan `Settings.dss_max_candidates` (env DSS_MAX_CANDIDATES).
@@ -105,18 +115,26 @@ class CandidateSet:
 def build_candidates(
     situation: Situation | str,
     parameters: Mapping[str, Any],
-    index: BaselineIndex,
+    snapshot: BaselineSnapshotData,
     *,
+    start_date: date | None = None,
     max_candidates: int = MAX_CANDIDATES,
 ) -> CandidateSet:
     """Kandidat sweep untuk skenario `situation` dengan parameter pengguna `parameters`.
 
-    `index` dibangun dari snapshot skenario. `SweepReferenceError` bila parameter pengguna tidak
-    valid terhadap snapshot itu.
+    `snapshot` adalah baseline snapshot skenario dan `start_date` tanggal mulai simulasi yang
+    disimpan bersama hasilnya (kosong berarti bawaan mesin, `default_start_date`).
+    `SweepReferenceError` bila parameter pengguna tidak valid terhadap snapshot itu.
     """
     if max_candidates < 1:
         raise ValueError("max_candidates paling sedikit 1 (pilihan pengguna)")
     spec = LEVERS[Situation(situation)]
+    index = BaselineIndex.build(snapshot)
+    context = LeverContext(
+        index=index,
+        start_date=start_date or default_start_date(snapshot),
+        holidays=frozenset(h.holiday_date for h in snapshot.holidays),
+    )
     outcome = validate_parameters(spec.situation, parameters, index)
     if outcome.params is None or not outcome.ok:
         raise SweepReferenceError(outcome.errors)
@@ -134,7 +152,7 @@ def build_candidates(
     seen: set[tuple[LeverValue, tuple[ResponseAction, ...]]] = {(current_value, ())}
     eligible: list[SweepCandidate] = []
     excluded: list[SweepCandidate] = []
-    for option in spec.options(outcome.params, index):
+    for option in spec.options(outcome.params, context):
         key = (option.value, option.actions)
         if key in seen:
             continue

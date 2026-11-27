@@ -4,8 +4,8 @@ Baseline dan parameter valid per situasi dipakai bersama dengan tes parameter sk
 (`tests.test_scenario_params`): RES-001 BE senior, RES-002 FE mid, RES-003 BE junior;
 PRJ-001 development dan PRJ-002 planning aktif, PRJ-004 on hold.
 
-Generator lever baru dibuat di SCRUM-62 dan SCRUM-64, jadi tes perilaku sweep memasang generator
-tiruan lewat `monkeypatch`.
+Tes perilaku sweep memasang generator tiruan lewat `monkeypatch`, jadi tidak bergantung pada
+generator setiap situasi (dites di `test_dss_parameter_levers.py`).
 """
 
 from dataclasses import replace
@@ -23,12 +23,12 @@ from app.modules.dss.sweep_levers import LEVERS, LeverKind, LeverOption
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import SITUATIONS, validate_parameters
 from app.modules.simulasi.sim_actions import ReassignTasks
-from tests.test_scenario_params import INDEX, VALID, with_changes
+from tests.test_scenario_params import BASELINE, INDEX, VALID, with_changes
 
 
 def use_options(monkeypatch, situation: Situation, *options: LeverOption) -> None:
     """Pasang generator tiruan yang mengusulkan `options` untuk `situation`."""
-    spec = replace(LEVERS[situation], options=lambda params, index: options)
+    spec = replace(LEVERS[situation], options=lambda params, context: options)
     monkeypatch.setitem(LEVERS, situation, spec)
 
 
@@ -75,7 +75,7 @@ EXPECTED_CURRENT = {
 
 @pytest.mark.parametrize("situation", list(Situation))
 def test_users_own_scenario_is_the_first_candidate(situation):
-    result = build_candidates(situation, VALID[situation], INDEX)
+    result = build_candidates(situation, VALID[situation], BASELINE)
 
     current = result.current
     assert current.is_current and current.eligible
@@ -92,7 +92,7 @@ def test_invalid_reference_raises_with_parameter_errors():
     params = with_changes(Situation.NEW_MEMBER, mentor_resource_id="RES-009")
 
     with pytest.raises(SweepReferenceError) as caught:
-        build_candidates(Situation.NEW_MEMBER, params, INDEX)
+        build_candidates(Situation.NEW_MEMBER, params, BASELINE)
 
     assert [error.type for error in caught.value.errors] == ["resource_not_found"]
     assert "RES-009" in str(caught.value)
@@ -116,7 +116,7 @@ def test_parameter_candidates_are_validated_and_ordered(monkeypatch):
         LeverOption("RES-002"),  # usulan ganda
     )
 
-    result = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX)
+    result = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE)
 
     assert summary(result) == [
         ("RES-001", "Anggota RES-001 (RES-001)", True, None),
@@ -139,7 +139,7 @@ def test_option_changes_other_fields_with_the_lever(monkeypatch):
         monkeypatch, Situation.NEW_MEMBER, LeverOption(None, changes={"mentor_share": None})
     )
 
-    result = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX)
+    result = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE)
 
     without_mentor = result.candidates[1]
     assert without_mentor.eligible
@@ -156,7 +156,7 @@ def test_priority_rank_candidates(monkeypatch):
         *(LeverOption(rank) for rank in (1, 2, 3, 4)),
     )
 
-    result = build_candidates(Situation.PRIORITY_CHANGE, params, INDEX)
+    result = build_candidates(Situation.PRIORITY_CHANGE, params, BASELINE)
 
     # Dua proyek aktif ditambah PRJ-004 yang diaktifkan: peringkat paling besar 3.
     assert summary(result) == [
@@ -173,7 +173,7 @@ def test_parameter_option_cannot_carry_actions(monkeypatch):
     use_options(monkeypatch, Situation.NEW_MEMBER, LeverOption("RES-002", actions=(action,)))
 
     with pytest.raises(ValueError, match="tidak membawa respons"):
-        build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX)
+        build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE)
 
 
 # --- lever pengalihan --------------------------------------------------------------------------
@@ -189,7 +189,7 @@ def test_reassignment_candidates_keep_parameters_and_carry_actions(monkeypatch):
         LeverOption("RES-002", excluded_reason="Peran ROLE-FE tidak cocok"),
     )
 
-    result = build_candidates(Situation.MEMBER_ABSENCE, VALID[Situation.MEMBER_ABSENCE], INDEX)
+    result = build_candidates(Situation.MEMBER_ABSENCE, VALID[Situation.MEMBER_ABSENCE], BASELINE)
 
     assert summary(result) == [
         (None, "Tanpa pengalihan", True, None),
@@ -213,7 +213,7 @@ def test_reassignment_option_needs_an_action(monkeypatch):
     use_options(monkeypatch, Situation.MEMBER_ABSENCE, LeverOption("RES-003"))
 
     with pytest.raises(ValueError, match="harus membawa respons"):
-        build_candidates(Situation.MEMBER_ABSENCE, VALID[Situation.MEMBER_ABSENCE], INDEX)
+        build_candidates(Situation.MEMBER_ABSENCE, VALID[Situation.MEMBER_ABSENCE], BASELINE)
 
 
 # --- batas kandidat dan urutan -----------------------------------------------------------------
@@ -228,8 +228,8 @@ def test_cap_keeps_reference_and_reports_truncation(monkeypatch):
         LeverOption("RES-003"),
     )
 
-    capped = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX, max_candidates=2)
-    only_current = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX, max_candidates=1)
+    capped = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE, max_candidates=2)
+    only_current = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE, max_candidates=1)
 
     # Kandidat dikecualikan tidak disimulasikan, jadi tidak ikut dibatasi.
     assert [c.value for c in capped.candidates] == ["RES-001", "RES-002", "RES-009"]
@@ -237,7 +237,7 @@ def test_cap_keeps_reference_and_reports_truncation(monkeypatch):
     assert [c.value for c in only_current.candidates] == ["RES-001", "RES-009"]
     assert only_current.omitted == 2
     with pytest.raises(ValueError):
-        build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX, max_candidates=0)
+        build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE, max_candidates=0)
 
 
 def test_same_input_gives_same_candidates(monkeypatch):
@@ -249,8 +249,8 @@ def test_same_input_gives_same_candidates(monkeypatch):
         LeverOption("RES-009"),
     )
 
-    first = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX)
-    second = build_candidates(Situation.NEW_MEMBER, MENTORED, INDEX)
+    first = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE)
+    second = build_candidates(Situation.NEW_MEMBER, MENTORED, BASELINE)
 
     assert first.candidates == second.candidates
     # Urutan generator dipertahankan; tidak diurutkan ulang menurut nilai.
