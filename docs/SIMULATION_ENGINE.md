@@ -12,6 +12,7 @@ Mesin simulasi menjalankan baseline snapshot ([BASELINE_SNAPSHOT.md](BASELINE_SN
 | 6 | Ubah hasil menjadi KPI dan bandingkan dengan baseline | `sim_kpi.py` | SCRUM-28 (dasar SCRUM-32) |
 | - | Replikasi Monte Carlo: median dan rentang | `sim_replication.py` | SCRUM-27 |
 | - | Orkestrasi baseline + skenario | `sim_engine.py` | SCRUM-28 |
+| - | Baseline sekali untuk banyak skenario: `prepare_baseline`, `simulate_scenario`, `scenario_side`, `replicate_scenario` (dipakai `run_engine` dan sweep DSS) | `sim_engine.py` | SCRUM-65 |
 | - | Isi layar hasil simulasi | `simulation_result.py`, `simulation_schemas.py` | SCRUM-29 |
 | - | Run only / run and save, hasil tersimpan, drill-down | `simulation_service.py`, `simulation_router.py`, `simulation_models.py`, migrasi `0023` | SCRUM-28, SCRUM-29 |
 
