@@ -47,6 +47,14 @@ HOTFIX_SHARE = 1.0
 # Item D-08 yang belum selesai pada start_date dianggap selesai dalam sekian hari kerja.
 OPEN_ITEM_DAYS = 2
 
+# Manfaat mentor bagi anggota baru (SCRUM-72), asumsi untuk disepakati bersama PuTI: pada hari
+# mentor hadir selama onboarding, kapasitas anggota baru bertambah MENTOR_GAIN x bagian waktu
+# mentor x faktor peran (paling besar 100%). Faktor peran 1 bila peran utama mentor sama dengan
+# peran anggota baru, MENTOR_SECONDARY_ROLE_FACTOR bila hanya peran sekundernya (cross-role
+# capable), 0 bila tidak memegang peran itu.
+MENTOR_GAIN = 2.0
+MENTOR_SECONDARY_ROLE_FACTOR = 0.5
+
 CLOSED_STATUSES = frozenset({TaskStatus.DONE.value, TaskStatus.DROPPED.value})
 ACTIVE_STATUSES = frozenset(status.value for status in ACTIVE_PROJECT_STATUSES)
 
@@ -94,6 +102,14 @@ class Release:
     resource_id: str
 
 
+@dataclass(frozen=True)
+class Transfer:
+    """Mulai `on`, task yang belum selesai dipindahkan ke `resource_id` (respons DSS)."""
+
+    on: date
+    resource_id: str
+
+
 @dataclass
 class SimTask:
     task_id: str
@@ -119,6 +135,8 @@ class SimTask:
     # Hari kerja task tertahan setelah siap dikerjakan (Task Blocker).
     block_days: int = 0
     releases: list[Release] = field(default_factory=list)
+    # Pemindahan ke anggota lain dari respons DSS (`sim_actions.ReassignTasks`).
+    transfers: list[Transfer] = field(default_factory=list)
     # Ditambahkan atau dikeluarkan dari scope oleh Change Request.
     added: bool = False
     removed: bool = False
@@ -175,6 +193,10 @@ class SimResource:
     secondary_role_ids: tuple[str, ...]
     capacity_reference: float
     join_date: date
+    # D-02: boleh mengambil alih task peran sekundernya (respons DSS, `sim_actions`).
+    cross_role_capable: bool = False
+    # D-02 seniority (junior, mid, senior); dipakai penilaian mentor DSS.
+    seniority: str | None = None
     # Tidak lagi di tim mulai tanggal ini (Member Withdrawal).
     leave_date: date | None = None
     ramp: Ramp | None = None
@@ -221,11 +243,22 @@ class NonProjectItem:
 
 @dataclass(frozen=True)
 class Mentoring:
-    """Selama onboarding `mentee_id`, mentor memakai `share` kapasitas hariannya."""
+    """Selama onboarding `mentee_id`, mentor memakai `share` kapasitas hariannya dan, pada hari
+    ia hadir, kapasitas anggota baru bertambah `boost` (paling besar 100%)."""
 
     mentor_id: str
     mentee_id: str
     share: float
+    boost: float = 0.0
+
+
+def mentor_role_factor(mentor: SimResource, role_id: str) -> float:
+    """Faktor peran manfaat mentor (`MENTOR_GAIN`): peran utama 1, sekunder (cross-role) 0.5."""
+    if mentor.primary_role_id == role_id:
+        return 1.0
+    if mentor.cross_role_capable and role_id in mentor.secondary_role_ids:
+        return MENTOR_SECONDARY_ROLE_FACTOR
+    return 0.0
 
 
 @dataclass
@@ -274,9 +307,7 @@ class SimWorld:
         if task.status == TaskStatus.IN_QA:
             return min(MIN_REMAINING_DAYS, effort)
         if task.actual_start is not None and task.actual_start < self.start_date:
-            worked = count_working_days(
-                task.actual_start, self.start_date - ONE_DAY, self.holidays
-            )
+            worked = count_working_days(task.actual_start, self.start_date - ONE_DAY, self.holidays)
             return max(effort - worked, MIN_REMAINING_DAYS)
         return effort
 
@@ -348,6 +379,8 @@ def build_world(baseline: BaselineSnapshotData, start_date: date | None = None) 
             if r.primary_role_id in roles
             else DEFAULT_CAPACITY_REFERENCE,
             join_date=r.join_date,
+            cross_role_capable=r.cross_role_capable,
+            seniority=r.seniority.value,
         )
         for r in baseline.resources
     }

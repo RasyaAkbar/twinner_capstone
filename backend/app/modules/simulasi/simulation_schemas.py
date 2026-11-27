@@ -269,6 +269,11 @@ class SimulationResult(BaseModel):
     members: list[MemberResult]
     warnings: list[SimulationWarning]
     notes: list[str] = Field(description="Asumsi dan perubahan yang diterapkan aturan skenario")
+    dss_sweep_id: int | None = Field(
+        None,
+        description="Sweep DSS yang dimulai setelah run and save (SCRUM-69); statusnya di "
+        "GET /dss/scenarios/{scenario_id}/sweep. Kosong untuk run_only dan hasil yang dibuka lagi",
+    )
 
 
 class ProjectDrilldown(BaseModel):

@@ -5,7 +5,8 @@
 1. Parameter skenario pengguna divalidasi penuh terhadap snapshot-nya dan menjadi kandidat
    acuan (`is_current`), selalu di urutan pertama. Hasil sweep dibandingkan dengannya.
 2. Generator lever situasinya (`sweep_levers.LEVERS`) mengusulkan nilai lain. Nilai yang sama
-   dengan pilihan pengguna, atau yang sudah diusulkan sebelumnya, dilewati.
+   dengan pilihan pengguna, atau yang sudah diusulkan sebelumnya, dilewati. Bila skenario tidak
+   punya nilai lain untuk dicoba (`NoLeverError`), alasannya dicatat di `no_lever`.
 3. Kandidat lever parameter divalidasi ulang dengan `validate_parameters`. Kandidat yang tidak
    lolos, atau yang ditolak generatornya, dicatat sebagai dikecualikan beserta alasannya dan
    tidak disimulasikan.
@@ -21,9 +22,18 @@ Modul ini tidak menyentuh basis data.
 import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
-from app.modules.dss.sweep_levers import LEVERS, LeverKind, LeverOption, LeverSpec, LeverValue
+from app.modules.dss.sweep_levers import (
+    LEVERS,
+    LeverContext,
+    LeverKind,
+    LeverOption,
+    LeverSpec,
+    LeverValue,
+    NoLeverError,
+)
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import (
     BaselineIndex,
@@ -31,6 +41,9 @@ from app.modules.simulasi.scenario_params import (
     validate_parameters,
 )
 from app.modules.simulasi.sim_actions import ResponseAction
+from app.modules.simulasi.sim_rules import apply_scenario
+from app.modules.simulasi.sim_world import build_world
+from app.modules.simulasi.snapshot_schemas import BaselineSnapshotData
 
 # Bawaan batas kandidat yang disimulasikan per sweep, termasuk pilihan pengguna. Job sweep
 # meneruskan `Settings.dss_max_candidates` (env DSS_MAX_CANDIDATES).
@@ -83,6 +96,8 @@ class CandidateSet:
     candidates: list[SweepCandidate]
     # Kandidat layak yang tidak disimulasikan karena batas `max_candidates`.
     omitted: int = 0
+    # Alasan skenario ini tidak punya nilai lever lain untuk dicoba; kandidatnya hanya acuan.
+    no_lever: str | None = None
 
     @property
     def truncated(self) -> bool:
@@ -105,22 +120,32 @@ class CandidateSet:
 def build_candidates(
     situation: Situation | str,
     parameters: Mapping[str, Any],
-    index: BaselineIndex,
+    snapshot: BaselineSnapshotData,
     *,
+    start_date: date | None = None,
     max_candidates: int = MAX_CANDIDATES,
 ) -> CandidateSet:
     """Kandidat sweep untuk skenario `situation` dengan parameter pengguna `parameters`.
 
-    `index` dibangun dari snapshot skenario. `SweepReferenceError` bila parameter pengguna tidak
-    valid terhadap snapshot itu.
+    `snapshot` adalah baseline snapshot skenario dan `start_date` tanggal mulai simulasi yang
+    disimpan bersama hasilnya (kosong berarti bawaan mesin, `default_start_date`).
+    `SweepReferenceError` bila parameter pengguna tidak valid terhadap snapshot itu.
     """
     if max_candidates < 1:
         raise ValueError("max_candidates paling sedikit 1 (pilihan pengguna)")
     spec = LEVERS[Situation(situation)]
+    index = BaselineIndex.build(snapshot)
     outcome = validate_parameters(spec.situation, parameters, index)
     if outcome.params is None or not outcome.ok:
         raise SweepReferenceError(outcome.errors)
     reference = outcome.params.model_dump(mode="json")
+    world = build_world(snapshot, start_date)
+    context = LeverContext(
+        index=index,
+        start_date=world.start_date,
+        holidays=world.holidays,
+        scenario=apply_scenario(world, spec.situation, outcome.params).world,
+    )
 
     current_value = spec.current_value(outcome.params)
     current = SweepCandidate(
@@ -134,19 +159,24 @@ def build_candidates(
     seen: set[tuple[LeverValue, tuple[ResponseAction, ...]]] = {(current_value, ())}
     eligible: list[SweepCandidate] = []
     excluded: list[SweepCandidate] = []
-    for option in spec.options(outcome.params, index):
-        key = (option.value, option.actions)
-        if key in seen:
-            continue
-        seen.add(key)
-        candidate = _candidate(spec, option, reference, index)
-        (eligible if candidate.eligible else excluded).append(candidate)
+    no_lever = None
+    try:
+        for option in spec.options(outcome.params, context):
+            key = (option.value, option.actions)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidate = _candidate(spec, option, reference, index)
+            (eligible if candidate.eligible else excluded).append(candidate)
+    except NoLeverError as exc:
+        no_lever = str(exc)
 
     room = max_candidates - 1
     return CandidateSet(
         lever=spec,
         candidates=[current, *eligible[:room], *excluded],
         omitted=max(0, len(eligible) - room),
+        no_lever=no_lever,
     )
 
 

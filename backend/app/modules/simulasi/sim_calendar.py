@@ -4,7 +4,8 @@ Untuk setiap anggota dan setiap hari kerja mulai `start_date`, kalender menghitu
 
 - `availability` (0..1): 0 pada akhir pekan, hari libur (D-11), ketidakhadiran (D-09, terencana
   maupun mendadak), sebelum `join_date`, dan setelah anggota keluar; pecahan selama onboarding
-  (naik linier dari kapasitas awal ke 1); 1 selain itu.
+  (naik linier dari kapasitas awal ke 1, ditambah `Mentoring.boost` pada hari mentornya hadir,
+  paling besar 1); 1 selain itu.
 - `capacity` = `capacity_reference` peran utama (D-03) x `availability`, dalam satuan beban
   yang sama dengan `load_weight` level kompleksitas (D-04). Ini penyebut utilisasi kapasitas
   harian penjadwal; Resource Load Index (FR-04.3) dihitung terpisah oleh modul Evaluasi.
@@ -91,9 +92,15 @@ class CapacityCalendar:
             if mentee is None or mentee.ramp is None or mentor.mentor_id not in availability:
                 continue
             shares = mentoring.setdefault(mentor.mentor_id, [0.0] * len(self.days))
+            mentor_flags = availability[mentor.mentor_id]
+            mentee_flags = availability[mentee.resource_id]
             first = self.first_index(mentee.ramp.start)
             for i in range(first, min(first + mentee.ramp.working_days, len(self.days))):
                 shares[i] += mentor.share
+                # Manfaat bimbingan (SCRUM-72): hanya pada hari mentor dan anggota baru hadir.
+                factor, absence, planned = mentee_flags[i]
+                if mentor.boost > 0 and mentor_flags[i][0] > EPS and factor > EPS:
+                    mentee_flags[i] = (min(1.0, factor + mentor.boost), absence, planned)
 
         for resource_id, flags in availability.items():
             non_project = [0.0] * len(self.days)

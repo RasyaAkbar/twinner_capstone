@@ -321,9 +321,7 @@ class _Checker:
             self.add(loc, f"Task {task_id} tidak ada di baseline", "task_not_found")
             return None
         if open_only and task.status in CLOSED_TASK_STATUSES:
-            self.add(
-                loc, f"Task {task_id} sudah berstatus {task.status.value}", "task_closed"
-            )
+            self.add(loc, f"Task {task_id} sudah berstatus {task.status.value}", "task_closed")
             return None
         return task
 
@@ -500,8 +498,7 @@ def check_member_rotation(p: MemberRotationParams, c: _Checker) -> None:
         elif assignment.resource_id != p.resource_id:
             c.add(
                 loc,
-                f"Penugasan {assignment_id} milik {assignment.resource_id}, "
-                f"bukan {p.resource_id}",
+                f"Penugasan {assignment_id} milik {assignment.resource_id}, bukan {p.resource_id}",
                 "assignment_other_member",
             )
         elif origin is not None and _task_project(c.index, assignment.task_id) != origin.project_id:
@@ -581,10 +578,7 @@ def check_priority_change(p: PriorityChangeParams, c: _Checker) -> None:
             c.add(("project_id",), f"Proyek {project.project_id} sudah rilis", "project_released")
         else:
             is_active = project.status in ACTIVE_PROJECT_STATUSES
-            projects = c.index.projects.values()
-            active = sum(1 for x in projects if x.status in ACTIVE_PROJECT_STATUSES)
-            # Proyek on_hold yang diberi prioritas ikut menjadi proyek aktif.
-            limit = active if is_active else active + 1
+            limit = max_priority_rank(project, c.index)
             if p.new_priority_rank > limit:
                 c.add(
                     ("new_priority_rank",),
@@ -600,6 +594,13 @@ def check_priority_change(p: PriorityChangeParams, c: _Checker) -> None:
         c.not_before_project(("target_date",), p.target_date, project)
     tasks = c.tasks("affected_task_ids", p.affected_task_ids, open_only=True)
     c.same_project("affected_task_ids", tasks, project)
+
+
+def max_priority_rank(project: ProjectRow, index: BaselineIndex) -> int:
+    """Peringkat prioritas terbesar yang dapat diberikan ke `project`: jumlah proyek aktif.
+    Proyek on_hold yang diberi prioritas ikut menjadi aktif, jadi batasnya bertambah satu."""
+    active = sum(1 for x in index.projects.values() if x.status in ACTIVE_PROJECT_STATUSES)
+    return active if project.status in ACTIVE_PROJECT_STATUSES else active + 1
 
 
 def check_critical_bug(p: CriticalBugParams, c: _Checker) -> None:

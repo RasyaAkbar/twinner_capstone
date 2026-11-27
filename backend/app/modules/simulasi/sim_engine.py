@@ -1,7 +1,8 @@
 """Mesin simulasi what-if: baseline dan satu skenario, berdampingan (Gambar 4.1, UC-03).
 
 1. Muat baseline snapshot sebagai dunia simulasi (`sim_world`).
-2. Terapkan aturan situasi pada salinannya (`sim_rules`, SCRUM-24).
+2. Terapkan aturan situasi pada salinannya (`sim_rules`, SCRUM-24), lalu respons kandidat DSS
+   bila ada (`sim_actions`, SCRUM-63).
 3. Hitung kalender kapasitas keduanya (`sim_calendar`, SCRUM-25).
 4-5. Jadwalkan keduanya hari demi hari (`sim_scheduler`, SCRUM-26).
 6. Hitung KPI keduanya dengan KPI Calculator modul Evaluasi (`evaluasi.kpi_calculator`,
@@ -13,7 +14,8 @@ hasilnya.
 """
 
 import time
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import date
 
 from app.modules.evaluasi.kpi_calculator import (
@@ -26,6 +28,7 @@ from app.modules.evaluasi.kpi_calculator import (
 from app.modules.evaluasi.kpi_definitions import EvaluationConfig
 from app.modules.simulasi.scenario_models import Situation
 from app.modules.simulasi.scenario_params import Params
+from app.modules.simulasi.sim_actions import ResponseAction, apply_actions
 from app.modules.simulasi.sim_calendar import CapacityCalendar
 from app.modules.simulasi.sim_kpi import ProjectOutcome, member_loads, project_outcomes
 from app.modules.simulasi.sim_replication import (
@@ -65,6 +68,106 @@ class EngineOutput:
     duration_ms: int
 
 
+@dataclass
+class PreparedBaseline:
+    """Baseline yang sudah disimulasikan, dipakai ulang untuk banyak skenario (DSS, SCRUM-65).
+
+    KPI baseline bergantung pada hari kerja terakhir yang dibandingkan (`until`), jadi sisinya
+    dihitung sekali per `until` lewat `side`.
+    """
+
+    world: SimWorld
+    reference: Reference
+    calendar: CapacityCalendar
+    schedule: ScheduleResult
+    config: EvaluationConfig
+    _sides: dict[date, SideRun] = field(default_factory=dict)
+
+    @property
+    def start_date(self) -> date:
+        return self.world.start_date
+
+    def side(self, until: date) -> SideRun:
+        if until not in self._sides:
+            self._sides[until] = _side(
+                self.world, self.calendar, self.schedule, until, self.reference, self.config
+            )
+        return self._sides[until]
+
+
+@dataclass
+class ScenarioRun:
+    """Skenario yang sudah dijadwalkan, sebelum KPI-nya dihitung."""
+
+    world: SimWorld
+    calendar: CapacityCalendar
+    schedule: ScheduleResult
+    targets: Targets
+    notes: list[str]
+
+
+def prepare_baseline(
+    snapshot: BaselineSnapshotData,
+    *,
+    start_date: date | None = None,
+    config: EvaluationConfig | None = None,
+) -> PreparedBaseline:
+    """Langkah 1, 3, dan 4-5 untuk baseline: dunia, kalender kapasitas, dan jadwalnya."""
+    world = build_world(snapshot, start_date)
+    calendar = CapacityCalendar(world)
+    return PreparedBaseline(
+        world=world,
+        reference=reference_of(snapshot, world),
+        calendar=calendar,
+        schedule=simulate(world, calendar),
+        config=config or EvaluationConfig(),
+    )
+
+
+def simulate_scenario(
+    base: PreparedBaseline,
+    situation: Situation | str,
+    params: Params,
+    actions: Sequence[ResponseAction] = (),
+) -> ScenarioRun:
+    """Langkah 2 sampai 5 untuk skenario pada salinan dunia baseline; baseline tidak berubah."""
+    applied = apply_scenario(base.world, situation, params)
+    apply_actions(applied, actions)
+    calendar = CapacityCalendar(applied.world)
+    return ScenarioRun(
+        world=applied.world,
+        calendar=calendar,
+        schedule=simulate(applied.world, calendar),
+        targets=applied.targets,
+        notes=applied.notes,
+    )
+
+
+def comparison_end(base: PreparedBaseline, *runs: ScenarioRun) -> date:
+    """Hari kerja terakhir yang dibandingkan: yang lebih akhir dari semua sisi."""
+    return max([base.schedule.end_date, *(run.schedule.end_date for run in runs)])
+
+
+def scenario_side(base: PreparedBaseline, run: ScenarioRun, until: date) -> SideRun:
+    """Langkah 6: beban harian dan KPI skenario sampai `until`."""
+    return _side(run.world, run.calendar, run.schedule, until, base.reference, base.config)
+
+
+def replicate_scenario(
+    base: PreparedBaseline, run: ScenarioRun, runs: int, seed: int = DEFAULT_SEED
+) -> ReplicationSummary:
+    return run_replications(
+        base.world,
+        run.world,
+        runs=runs,
+        seed=seed,
+        baseline_calendar=base.calendar,
+        scenario_calendar=run.calendar,
+        reference=base.reference,
+        config=base.config,
+    )
+
+
 def run_engine(
     snapshot: BaselineSnapshotData,
     situation: Situation | str,
@@ -74,52 +177,27 @@ def run_engine(
     runs: int | None = None,
     seed: int = DEFAULT_SEED,
     config: EvaluationConfig | None = None,
+    actions: Sequence[ResponseAction] = (),
 ) -> EngineOutput:
     """Simulasikan baseline dan skenario; `runs` mengaktifkan replikasi Monte Carlo.
 
     `config` adalah parameter rumus KPI (FR-04.11); kosong berarti parameter bawaan.
+    `actions` adalah respons kandidat DSS (`sim_actions`), diterapkan pada salinan skenario
+    setelah aturan situasinya; `ResponseActionError` bila respons tidak dapat diterapkan.
     """
     began = time.perf_counter()
-    config = config or EvaluationConfig()
-    baseline_world = build_world(snapshot, start_date)
-    reference = reference_of(snapshot, baseline_world)
-    applied = apply_scenario(baseline_world, situation, params)
-    scenario_world = applied.world
-
-    baseline_calendar = CapacityCalendar(baseline_world)
-    scenario_calendar = CapacityCalendar(scenario_world)
-    baseline_schedule = simulate(baseline_world, baseline_calendar)
-    scenario_schedule = simulate(scenario_world, scenario_calendar)
-    until = max(baseline_schedule.end_date, scenario_schedule.end_date)
-
-    sides = [
-        _side(world, calendar, schedule, until, reference, config)
-        for world, calendar, schedule in (
-            (baseline_world, baseline_calendar, baseline_schedule),
-            (scenario_world, scenario_calendar, scenario_schedule),
-        )
-    ]
-    replication = None
-    if runs:
-        replication = run_replications(
-            baseline_world,
-            scenario_world,
-            runs=runs,
-            seed=seed,
-            baseline_calendar=baseline_calendar,
-            scenario_calendar=scenario_calendar,
-            reference=reference,
-            config=config,
-        )
+    base = prepare_baseline(snapshot, start_date=start_date, config=config)
+    run = simulate_scenario(base, situation, params, actions)
+    until = comparison_end(base, run)
     return EngineOutput(
-        start_date=baseline_world.start_date,
+        start_date=base.start_date,
         end_date=until,
-        baseline=sides[0],
-        scenario=sides[1],
-        targets=applied.targets,
-        config=config,
-        notes=baseline_world.notes + applied.notes,
-        replication=replication,
+        baseline=base.side(until),
+        scenario=scenario_side(base, run, until),
+        targets=run.targets,
+        config=base.config,
+        notes=base.world.notes + run.notes,
+        replication=replicate_scenario(base, run, runs, seed) if runs else None,
         duration_ms=round((time.perf_counter() - began) * 1000),
     )
 

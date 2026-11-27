@@ -7,6 +7,7 @@ from app.modules.data.router import router as data_router
 from app.modules.data.takeover_router import router as takeover_router
 from app.modules.digital_twin.process_map_router import router as process_map_router
 from app.modules.digital_twin.router import router as digital_twin_router
+from app.modules.dss.router import router as dss_router
 from app.modules.evaluasi.router import router as evaluasi_router
 from app.modules.simulasi.router import router as simulasi_router
 
@@ -20,3 +21,4 @@ api_router.include_router(digital_twin_router)
 api_router.include_router(process_map_router)
 api_router.include_router(simulasi_router)
 api_router.include_router(evaluasi_router)
+api_router.include_router(dss_router)

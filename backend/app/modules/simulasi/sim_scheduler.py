@@ -3,7 +3,9 @@
 Setiap hari kerja mulai `start_date`, penjadwal:
 
 1. Melepas task yang dijadwalkan dilepas hari itu (rotasi, keluar tim, penugasan berakhir)
-   ke pool. Bila tidak ada lagi anggota yang memegang perannya, task tidak terjadwal.
+   ke pool. Bila tidak ada lagi anggota yang memegang perannya, task tidak terjadwal. Lalu
+   memindahkan task yang dialihkan respons DSS hari itu (`Transfer`) ke pemilik barunya: task
+   yang sudah berjalan dilanjutkan pemilik baru dengan sisa effort-nya.
 2. Menandai task yang dependency-nya terpenuhi. Task bergantung pada pendahulunya dengan
    `propagation_factor` p (D-06): task boleh mulai setelah pendahulunya menyelesaikan paling
    sedikit p bagian effort-nya. Dependency hard (p = 1) berarti pendahulu sudah selesai pada
@@ -188,6 +190,7 @@ class _Run:
         self.holding: dict[str, list[str]] = {rid: [] for rid in self.members}
         self.pool: list[int] = []
         self.releases: list[tuple[date, str, str]] = []
+        self.transfers: list[tuple[date, str, str]] = []
 
         for task in schedulable:
             task_id = task.task_id
@@ -216,7 +219,10 @@ class _Run:
                 bisect.insort(target, self.rank[task_id])
             for release in task.releases:
                 self.releases.append((release.on, task_id, release.resource_id))
+            for transfer in task.transfers:
+                self.transfers.append((transfer.on, task_id, transfer.resource_id))
         self.releases.sort()
+        self.transfers.sort()
 
         self.preds: dict[str, list[tuple[str, float]]] = defaultdict(list)
         self.dependents: dict[str, list[tuple[str, float]]] = defaultdict(list)
@@ -234,7 +240,7 @@ class _Run:
         self._initial_checks()
         member_days: dict[str, list[MemberDay]] = {rid: [] for rid in self.members}
         last_day = self.w.start_date
-        release_at = 0
+        release_at = transfer_at = 0
         for i, day in enumerate(self.cal.days):
             if not self.pending:
                 break
@@ -243,6 +249,10 @@ class _Run:
                 _, task_id, resource_id = self.releases[release_at]
                 self._release(task_id, resource_id, day)
                 release_at += 1
+            while transfer_at < len(self.transfers) and self.transfers[transfer_at][0] <= day:
+                _, task_id, resource_id = self.transfers[transfer_at]
+                self._transfer(task_id, resource_id)
+                transfer_at += 1
 
             blocked = self._prepare_day(day)
             states: dict[str, list] = {}
@@ -474,6 +484,26 @@ class _Run:
         self.owner[task_id] = None
         bisect.insort(self.pool, self.rank[task_id])
         self._check_takers(task_id, day)
+
+    def _transfer(self, task_id: str, resource_id: str) -> None:
+        """Pindahkan task yang belum selesai ke `resource_id`, dari pemiliknya atau dari pool."""
+        if task_id not in self.pending or resource_id not in self.queue:
+            return
+        owner = self.owner[task_id]
+        if owner == resource_id:
+            return
+        rank = self.rank[task_id]
+        if owner is None:
+            self.pool.remove(rank)
+        elif task_id in self.started:
+            self.holding[owner].remove(task_id)
+        else:
+            self.queue[owner].remove(rank)
+        self.owner[task_id] = resource_id
+        if task_id in self.started:
+            self.holding[resource_id].append(task_id)
+        else:
+            bisect.insort(self.queue[resource_id], rank)
 
     def _check_takers(self, task_id: str, day: date) -> None:
         """Task di pool butuh setidaknya satu anggota yang masih dapat mengambilnya."""
