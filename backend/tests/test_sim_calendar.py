@@ -157,6 +157,29 @@ def test_mentor_spends_part_of_the_day_during_onboarding():
     assert calendar.day("RES-003", d(12)).mentoring == 0
 
 
+def test_mentor_boost_applies_on_days_the_mentor_is_present():
+    """SCRUM-72: boost 0.3 di atas onboarding 0.5, 0.625, 0.75, 0.875 (paling besar 1)."""
+    changed = deepcopy(WORLD)
+    changed.resources["NEW-001"] = SimResource(
+        resource_id="NEW-001",
+        name="Anggota baru",
+        primary_role_id="ROLE-BE",
+        secondary_role_ids=(),
+        capacity_reference=3.0,
+        join_date=d(5),
+        ramp=Ramp(d(5), 4, 0.5),
+    )
+    changed.mentoring.append(Mentoring("RES-003", "NEW-001", 0.2, 0.3))
+    # Mentor tidak hadir Kamis 08: hari itu tanpa manfaat dan tanpa biaya bimbingan.
+    changed.absences.append(Absence("RES-003", d(8), d(8), "sudden_leave", False))
+    calendar = CapacityCalendar(changed)
+
+    expected = {d(5): 0.8, d(6): 0.925, d(8): 0.75, d(9): 1.0, d(12): 1.0}
+    for day, factor in expected.items():
+        assert calendar.day("NEW-001", day).availability == pytest.approx(factor), day
+    assert calendar.day("RES-003", d(8)).mentoring == 0
+
+
 def test_bug_fix_item_uses_the_members_own_working_days():
     changed = deepcopy(WORLD)
     changed.resources["RES-004"] = deepcopy(changed.resources["RES-003"])

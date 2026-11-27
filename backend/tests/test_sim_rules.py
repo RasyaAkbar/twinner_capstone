@@ -246,8 +246,9 @@ def test_new_member_is_added_with_onboarding_ramp_and_mentor():
     assert member.ramp == Ramp(d(5), 5, 0.5)
     assert member.helps == Help(d(5), None)
     assert member.added is True
-    # Tanpa mentor_share dipakai bawaan 20%.
-    assert applied.world.mentoring == [Mentoring("RES-002", "NEW-001", 0.2)]
+    # Tanpa mentor_share dipakai bawaan 20%. RES-002 berperan BE seperti anggota baru, jadi
+    # manfaatnya 2.0 x 0.2 x 1 = 0.4 (SCRUM-72).
+    assert applied.world.mentoring == [Mentoring("RES-002", "NEW-001", 0.2, 0.4)]
     assert applied.targets.resources == {"NEW-001", "RES-002"}
 
 
@@ -268,12 +269,34 @@ def test_new_member_at_full_capacity_takes_a_waiting_task():
 
 def test_new_member_ramp_up_and_mentor_time_slow_work_down():
     result = simulate(apply(Situation.NEW_MEMBER, base=NEW_MEMBER_BASE).world)
-    # NEW-001 maju 0.5, 0.6, 0.7, 0.8 per hari (kapasitas naik 10% per hari kerja).
+    # Tanpa mentor NEW-001 maju 0.5, 0.6, 0.7, 0.8 per hari (naik 10% per hari kerja). Mentor
+    # BE menambah 0.4 pada hari ia hadir: 0.9, lalu 1.0; TSK-0002 (2 hari) selesai 07.
     assert result.tasks["TSK-0002"].owner == "NEW-001"
-    assert dates(result, "TSK-0002") == (d(5), d(8))
+    assert dates(result, "TSK-0002") == (d(5), d(7))
     # Mentor RES-002 hanya punya 80% kapasitas: TSK-0003 maju 0.8 per hari, selesai 07
     # (baseline 06).
     assert dates(result, "TSK-0003") == (d(5), d(7))
+
+
+def test_new_member_without_mentor_ramps_up_alone():
+    result = simulate(
+        apply(Situation.NEW_MEMBER, base=NEW_MEMBER_BASE, mentor_resource_id=None).world
+    )
+    # 0.5 + 0.6 + 0.7 < 2, selesai hari keempat; RES-002 penuh: TSK-0003 selesai 06.
+    assert dates(result, "TSK-0002") == (d(5), d(8))
+    assert dates(result, "TSK-0003") == (d(5), d(6))
+
+
+def test_mentor_with_another_role_only_costs_time():
+    base = deepcopy(NEW_MEMBER_BASE)
+    fe = world(resources=[resource("RES-003", "ROLE-FE")]).resources["RES-003"]
+    base.resources["RES-003"] = fe
+    applied = apply(Situation.NEW_MEMBER, base=base, mentor_resource_id="RES-003")
+
+    assert applied.world.mentoring == [Mentoring("RES-003", "NEW-001", 0.2, 0.0)]
+    assert "tidak mempercepat onboarding" in applied.notes[-1]
+    # Tanpa manfaat bimbingan NEW-001 maju seperti tanpa mentor.
+    assert dates(simulate(applied.world), "TSK-0002") == (d(5), d(8))
 
 
 # --- 4. Member Rotation or Withdrawal -------------------------------------------------------

@@ -51,6 +51,7 @@ from app.modules.simulasi.scenario_params import (
     TaskOverrunParams,
 )
 from app.modules.simulasi.sim_world import (
+    MENTOR_GAIN,
     Absence,
     Help,
     Mentoring,
@@ -61,6 +62,7 @@ from app.modules.simulasi.sim_world import (
     SimTask,
     SimWorld,
     item_share,
+    mentor_role_factor,
     next_id,
     onboarding_working_days,
 )
@@ -199,11 +201,19 @@ def new_member(w: SimWorld, p: NewMemberParams, out: AppliedScenario) -> None:
     )
     if p.mentor_resource_id is not None:
         share = p.mentor_share if p.mentor_share is not None else DEFAULT_MENTOR_SHARE
-        w.mentoring.append(Mentoring(p.mentor_resource_id, resource_id, share))
+        mentor = w.resources[p.mentor_resource_id]
+        boost = round(MENTOR_GAIN * share * mentor_role_factor(mentor, p.role_id), 6)
+        w.mentoring.append(Mentoring(p.mentor_resource_id, resource_id, share, boost))
         out.targets.resources.add(p.mentor_resource_id)
+        benefit = (
+            f"; pada hari mentor hadir kapasitas {resource_id} bertambah {boost:.0%}"
+            if boost > 0
+            else f"; {p.mentor_resource_id} tidak memegang peran {p.role_id}, jadi bimbingannya "
+            "tidak mempercepat onboarding"
+        )
         out.notes.append(
             f"{p.mentor_resource_id} membimbing {resource_id} dengan {share:.0%} kapasitas "
-            "hariannya selama onboarding."
+            f"hariannya selama onboarding{benefit}."
         )
 
 

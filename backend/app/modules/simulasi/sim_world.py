@@ -47,6 +47,14 @@ HOTFIX_SHARE = 1.0
 # Item D-08 yang belum selesai pada start_date dianggap selesai dalam sekian hari kerja.
 OPEN_ITEM_DAYS = 2
 
+# Manfaat mentor bagi anggota baru (SCRUM-72), asumsi untuk disepakati bersama PuTI: pada hari
+# mentor hadir selama onboarding, kapasitas anggota baru bertambah MENTOR_GAIN x bagian waktu
+# mentor x faktor peran (paling besar 100%). Faktor peran 1 bila peran utama mentor sama dengan
+# peran anggota baru, MENTOR_SECONDARY_ROLE_FACTOR bila hanya peran sekundernya (cross-role
+# capable), 0 bila tidak memegang peran itu.
+MENTOR_GAIN = 2.0
+MENTOR_SECONDARY_ROLE_FACTOR = 0.5
+
 CLOSED_STATUSES = frozenset({TaskStatus.DONE.value, TaskStatus.DROPPED.value})
 ACTIVE_STATUSES = frozenset(status.value for status in ACTIVE_PROJECT_STATUSES)
 
@@ -235,11 +243,22 @@ class NonProjectItem:
 
 @dataclass(frozen=True)
 class Mentoring:
-    """Selama onboarding `mentee_id`, mentor memakai `share` kapasitas hariannya."""
+    """Selama onboarding `mentee_id`, mentor memakai `share` kapasitas hariannya dan, pada hari
+    ia hadir, kapasitas anggota baru bertambah `boost` (paling besar 100%)."""
 
     mentor_id: str
     mentee_id: str
     share: float
+    boost: float = 0.0
+
+
+def mentor_role_factor(mentor: SimResource, role_id: str) -> float:
+    """Faktor peran manfaat mentor (`MENTOR_GAIN`): peran utama 1, sekunder (cross-role) 0.5."""
+    if mentor.primary_role_id == role_id:
+        return 1.0
+    if mentor.cross_role_capable and role_id in mentor.secondary_role_ids:
+        return MENTOR_SECONDARY_ROLE_FACTOR
+    return 0.0
 
 
 @dataclass
