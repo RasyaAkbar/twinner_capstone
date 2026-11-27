@@ -208,6 +208,10 @@ Skenario *what-if* dibuat dari satu dari delapan situasi keputusan dan dikaitkan
 
 `POST /api/v1/simulasi/scenarios/{id}/run` menjalankan baseline dan skenario hari kerja demi hari kerja (aturan situasi, kalender kapasitas per anggota, penjadwalan dengan propagasi dependency), lalu mengembalikan KPI, selisih, dan statusnya beserta proyek, task, dan beban anggota yang terdampak. `mode` `run_only` hanya mengembalikan hasil; `run_and_save` menyimpan skenario lalu hasilnya, yang dibuka lagi lewat `GET .../result` dan drill-down per proyek atau anggota. `replication: {}` menambahkan median dan rentang dari 500 replikasi Monte Carlo. Asumsi model dan rumusnya: [docs/SIMULATION_ENGINE.md](docs/SIMULATION_ENGINE.md).
 
+### Rekomendasi per skenario (DSS)
+
+Setiap `run_and_save` memulai sweep DSS di latar belakang: situasi skenario diulang untuk setiap nilai keputusannya (misalnya setiap calon mentor untuk New Member, setiap pengganti untuk Member Absence), dinilai pada empat kriteria, lalu diberi alasan. Statusnya dan kandidat menurut peringkat dibaca lewat `GET /api/v1/dss/scenarios/{id}/sweep`, rinciannya lewat `GET .../sweep/candidates/{candidate_id}`, dan `POST .../sweep` menjalankannya ulang. Lever per situasi, kriteria, bobot, dan asumsinya: [docs/DSS_SWEEP.md](docs/DSS_SWEEP.md).
+
 Referensi teknis: [Vite](https://vite.dev/guide/), [router modular FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/), [SQLAlchemy PostgreSQL](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html).
 
 ## Login dan sesi pengguna

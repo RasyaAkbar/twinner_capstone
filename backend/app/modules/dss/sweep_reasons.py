@@ -152,7 +152,7 @@ class _Writer:
             period = _PERIOD.get(self.situation, "sejak pengalihan sampai task selesai")
             text += (
                 f"{';' if role.score is not None else ':'} kapasitas kosongnya "
-                f"{facts['available_days']:g} dari {facts['working_days']} hari kerja {period} "
+                f"{_num(facts['available_days'])} dari {facts['working_days']} hari kerja {period} "
                 f"({facts['start']} s.d. {facts['end']})"
             )
         return f"{text}." if text != who else ""
@@ -199,7 +199,7 @@ class _Writer:
         peak = facts["peak_rli"]
         if abs(peak) > EPS:
             change = "naik" if peak > 0 else "turun"
-            parts.append(f"RLI mingguan tertingginya {change} {abs(peak):g}")
+            parts.append(f"RLI mingguan tertingginya {change} {_num(abs(peak))}")
         if not parts:
             return f"Pekerjaan {who} sendiri tidak terdampak dibandingkan {self.reference}."
         return f"Dampak pada pekerjaan {who} sendiri dibandingkan {self.reference}: {_join(parts)}."
@@ -222,10 +222,15 @@ def _launch(sv: float | None) -> str:
     if sv is None:
         return "tidak dapat dihitung karena ada task yang tidak terjadwal"
     if sv > EPS:
-        return f"terlambat {sv:g} hari kerja dari target"
+        return f"terlambat {_num(sv)} hari kerja dari target"
     if sv < -EPS:
-        return f"{-sv:g} hari kerja sebelum target"
+        return f"{_num(-sv)} hari kerja sebelum target"
     return "tepat pada target"
+
+
+def _num(value: float) -> str:
+    """Angka untuk kalimat: paling banyak dua desimal (median replikasi bisa pecahan)."""
+    return f"{round(value, 2):g}"
 
 
 def _counts(better: int, worse: int) -> str:
